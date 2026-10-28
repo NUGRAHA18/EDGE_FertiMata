@@ -66,10 +66,6 @@ class Safety:
         # Sama, tetapi hanya ON yang ditolak: RUN selama gerakan otomatis trolley tetap bisa
         # dihentikan (S3).
         self.managed_on: dict[str, str] = {}
-        # ON ditolak selama urutan otomatis lain memegang sisi eksklusifnya, juga bagi modul edge
-        # sendiri (`internal=True`): mis. loop dosing menahan trolley dan pompa siram di antara
-        # dua dosis, saat tidak ada pompa pupuk yang menyala (S4, S5). OFF tidak pernah ditahan.
-        self.held: dict[str, Refusal] = {}
         # Diisi modul trolley saat kabel limit terdeteksi putus (S16): jalan ditolak sampai restart.
         self.travel_locked: str | None = None
         self._task: asyncio.Task[None] | None = None
@@ -91,8 +87,6 @@ class Safety:
         refusal = self._check_blocked_while_on(name)
         if refusal is not None or not on:
             return refusal
-        if name in self.held:
-            return self.held[name]
         if self.outputs.states[name].faulty:
             return Refusal(
                 REASON_OUTPUT_FAULT,
@@ -116,8 +110,6 @@ class Safety:
         Hanya aturan yang tidak bergantung arah/posisi (rusak, daya S7, eksklusif S4–S6): cek
         limit dan arah dilakukan modul trolley saat benar-benar mulai jalan.
         """
-        if name in self.held:
-            return self.held[name]
         if self.outputs.states[name].faulty:
             return Refusal(
                 REASON_OUTPUT_FAULT,

@@ -9,15 +9,20 @@ Status per 26 Okt 2026 (laporan sesi backend; di-commit di branch BE `feat/edge-
 (`actuator_command.failure_code`, Flyway V8), **BE-6 selesai** (topik MQTT/`MQTT_CLIENT_ID`/`JWT_ISSUER` di
 `.env`, lalu database dan role diganti nama ke `fertimata` dengan data utuh). BE-1 … BE-4 dilaporkan selesai 26 Okt oleh sesi backend (branch `feat/edge-alignment-be5-be7`,
 belum di-commit); kontrak hasilnya ada di [02-kontrak-mqtt.md](02-kontrak-mqtt.md) §3, §4.5, §5.1. Sisi
-edge: `TROLLEY-GOTO` dan `TROLLEY-PATROL` sudah berjalan (F7.5, F8.4, 26 Okt); `DOSING-LOOP` sejak 28 Okt (F9,
-dengan simulator; angka P-H12 belum ada). Alert hasil baru `DOSING_FAILED` (WARNING) memakai tipe bebas backend.
+edge: `TROLLEY-GOTO` dan `TROLLEY-PATROL` sudah berjalan (F7.5, F8.4, 26 Okt).
+
+**Pembaruan 28 Okt 2026 (keputusan user):** campur pupuk otomatis dan penjadwalan penyiraman/dosing
+dipindah ke layanan terpisah milik tim AI yang memanggil API backend dengan perintah relay mentah
+(`DOSING-N/P/K`, `STIRRER`, `DIST-PUMP`). Bagian dosing dari BE-1 dan seluruh BE-4 **dibatalkan**:
+backend menghapus `DOSING-LOOP` dan metrik `dosing.*` dari katalog (migrasi V9 menonaktifkan baris
+lamanya), edge menghapus loop F9 (masih ada di commit edge `9f0990e`).
 
 | ID | Ringkas | Prioritas | Edge yang menunggu |
 |---|---|---|---|
-| BE-1 | Aktuator virtual + perintah tingkat tinggi (trolley, patroli, dosing) | Tinggi (D2, D3) | F7.5, F8.4, F9.1 |
+| BE-1 | Aktuator virtual + perintah tingkat tinggi (trolley, patroli; dosing dibatalkan 28 Okt) | Tinggi (D2, D3) | F7.5, F8.4 |
 | BE-2 | Sajikan berkas citra (`imageUrl`) | Sedang (D7) | F8, F12 |
 | BE-3 | Sesuaikan timeout offline dan interval telemetri | Rendah (D4) | — |
-| BE-4 | Metrik `dosing.*` di katalog | Sedang | F9.4 |
+| BE-4 | ~~Metrik `dosing.*` di katalog~~ dibatalkan 28 Okt (dihapus lagi, V9) | — | — |
 | BE-5 | `docker-compose.yml` meneruskan `DEV_SIMULATOR_ENABLED` | Rendah | uji end-to-end |
 | BE-6 | Penamaan `smartmelon` → `fertimata` di database dev | Rendah (D8) | — |
 | BE-7 | (Opsional) kenali kode alasan ACK gagal dari interlock edge | Rendah | — |
@@ -25,6 +30,9 @@ dengan simulator; angka P-H12 belum ada). Alert hasil baru `DOSING_FAILED` (WARN
 ---
 
 ## BE-1 — Aktuator virtual dan perintah tingkat tinggi (D2, D3)
+
+> Catatan 28 Okt: baris `DOSING-LOOP` dan semua penyebutan dosing di bawah adalah usulan awal yang
+> **dibatalkan**; loop dosing kini milik layanan tim AI. Bagian trolley/patroli tetap berlaku.
 
 **Masalah.** Katalog Rev A hanya mengenal relay mentah (`TROLLEY-RUN`, `TROLLEY-DIR`, `DOSING-N`, …).
 Patroli kamera (§9.4) dan loop dosing (§8.2) butuh puluhan langkah berurutan yang cepat dan harus tetap
@@ -71,7 +79,10 @@ polling tercepat: PZEM 3 s, relay/tangki float 5 s, udara/cahaya 60 s, tanah 300
 Bila backend hanya mendukung satu nilai global, cukup dicatat bahwa metrik kelengkapan untuk
 GREENHOUSE-01 dan EC/pH akan terlihat rendah padahal normal.
 
-## BE-4 — Metrik `dosing.*`
+## BE-4 — Metrik `dosing.*` (dibatalkan 28 Okt)
+
+> Loop dosing tidak lagi dijalankan edge, jadi metrik ini tidak dikirim. Backend menghapusnya dari
+> katalog (V9). Bila layanan tim AI perlu mencatat iterasinya, itu urusan layanan tersebut.
 
 Untuk catatan tiap iterasi loop dosing (Protokol Data, laporan riset). Usulan metrik di `RIO-TANK-01`:
 `dosing.iteration`, `dosing.ec_target`, `dosing.ec_measured`, `dosing.n_ml`, `dosing.p_ml`, `dosing.k_ml`.

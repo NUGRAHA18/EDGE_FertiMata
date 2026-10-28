@@ -2,17 +2,17 @@
 
 - `TROLLEY-GOTO` (F7.5): `HOME`, `GOTO_STATION {"station": n}`, `STOP`.
 - `TROLLEY-PATROL` (F8.4): `START` (patroli manual, `Patrol.run(trigger="manual")`), `STOP`.
-- `DOSING-LOOP` (F9): `DOSE_TO_TARGET {"targetEc": x, "phase": "..."}` (loop §8.2, `dosing.py`),
-  `STOP` (loop berhenti, semua pompa pupuk dan aduk OFF).
+
+Loop dosing (F9, `DOSING-LOOP`) dipindah ke layanan tim AI (keputusan 28 Okt). Layanan itu memakai
+perintah relay mentah `DOSING-N/P/K`, `STIRRER`, `DIST-PUMP` lewat backend, jadi tidak ada di sini.
 
 ACK sukses dengan state `ON` begitu urutan **dimulai** (Kontrak §4.3); urutan berjalan sebagai tugas
 latar. Selesai atau batal → status `actuators` `OFF` tanpa ACK baru, hasil lewat alert INFO
-(`TROLLEY_ARRIVED`, `PATROL_DONE`, `DOSING_DONE`) atau WARNING. Prasyarat yang bisa diperiksa di
-depan (trolley terkunci/dipakai, daya S7, float S8, eksklusif S4–S6, disk penuh, angka P-H12 belum
-diisi) menolak perintah lewat ACK gagal.
+(`TROLLEY_ARRIVED`, `PATROL_DONE`) atau WARNING. Prasyarat yang bisa diperiksa di depan (trolley
+terkunci/dipakai, daya S7, eksklusif S4–S6, disk penuh) menolak perintah lewat ACK gagal.
 
-`STOP` tidak pernah ditolak (S3): selalu mematikan RUN (trolley) atau semua output dosing dengan
-prioritas STOP, walaupun tidak ada urutan virtual yang berjalan.
+`STOP` tidak pernah ditolak (S3): selalu mematikan RUN trolley dengan prioritas STOP, walaupun tidak
+ada urutan virtual yang berjalan.
 """
 
 from __future__ import annotations
@@ -30,12 +30,11 @@ from .commands import (
     CommandResult,
 )
 from .config import Config
-from .dosing import DosingLoop
 from .hal import Clock
 from .logs import fields
 from .patrol import Patrol
 from .poller import TelemetrySink
-from .safety import REASON_BUSY, REASON_INTERLOCK_EXCLUSIVE, Safety
+from .safety import REASON_BUSY, Safety
 from .trolley import (
     REASON_LIMIT,
     REASON_LOCKED,
@@ -49,7 +48,6 @@ log = logging.getLogger(__name__)
 
 GOTO = "trolley_goto"
 PATROL = "trolley_patrol"
-DOSING = "dosing_loop"
 
 # Kegagalan yang sudah punya alert sendiri dari modul trolley (jangan dobel di dashboard).
 _ALERTED_BY_TROLLEY = frozenset({REASON_NO_REED, REASON_TIMEOUT, REASON_LIMIT})
@@ -64,10 +62,8 @@ class VirtualActuators(CommandHandler):
         safety: Safety,
         clock: Clock,
         sink: TelemetrySink | None = None,
-        dosing: DosingLoop | None = None,
     ) -> None:
         self.config = config
-        self.dosing = dosing
         self.trolley = trolley
         self.patrol = patrol
         self.safety = safety
@@ -82,8 +78,6 @@ class VirtualActuators(CommandHandler):
         self.listeners: list[Callable[[str], None]] = []
         if patrol is not None:
             patrol.listeners.append(self._on_patrol_changed)
-        if dosing is not None:
-            dosing.listeners.append(lambda: self._notify(DOSING))
 
     # --- state (Kontrak §4.2) -----------------------------------------------------------------
 
@@ -93,8 +87,6 @@ class VirtualActuators(CommandHandler):
         if kind == PATROL:
             # Patroli terjadwal ikut dilaporkan: backend memakai state ini untuk interlock.
             return self._patrol_starting or (self.patrol is not None and self.patrol.running)
-        if kind == DOSING:
-            return self.dosing is not None and self.dosing.running
         return False
 
     def actuator_states(self, device_id: str) -> dict[str, str]:
@@ -125,8 +117,6 @@ class VirtualActuators(CommandHandler):
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
-        if self.dosing is not None:
-            await self.dosing.stop()
 
     # --- perintah -----------------------------------------------------------------------------
 
@@ -135,14 +125,9 @@ class VirtualActuators(CommandHandler):
         if action == "STOP":
             if kind == PATROL:
                 await self._stop_patrol()
-            elif kind == DOSING:
-                if self.dosing is not None:
-                    await self.dosing.stop()
             else:
                 await self._stop_goto()
             return CommandResult(True, "OFF")
-        if kind == DOSING and action == "DOSE_TO_TARGET" and self.dosing is not None:
-            return self._start_dosing(command)
         if kind == GOTO and action in ("HOME", "GOTO_STATION"):
             return self._start_goto(command)
         if kind == PATROL and action == "START" and self.patrol is not None:
@@ -271,46 +256,6 @@ class VirtualActuators(CommandHandler):
         elif self.trolley.busy:
             # STOP tetap berarti RUN OFF walau yang berjalan bukan patroli (S3).
             await self.trolley.halt("stop-patrol")
-
-    # --- DOSING-LOOP (F9) ----------------------------------------------------------------------
-
-    def _start_dosing(self, command: Command) -> CommandResult:
-        assert self.dosing is not None
-        cfg = self.config.dosing
-        params = command.payload.parameters
-        target, phase = params.get("targetEc"), params.get("phase")
-        low, high = cfg.target_ec_ms_cm
-        if (
-            isinstance(target, bool)
-            or not isinstance(target, (int, float))
-            or not low <= target <= high
-        ):
-            return CommandResult.failed(
-                REASON_INVALID, f"target kadar pupuk (EC) wajib diisi {low:g}–{high:g}", "OFF"
-            )
-        if not isinstance(phase, str) or phase not in cfg.ratio:
-            return CommandResult.failed(
-                REASON_INVALID, f"fase tanaman harus salah satu dari: {', '.join(cfg.ratio)}", "OFF"
-            )
-        state = self._current(DOSING)
-        if self.dosing.running:
-            return CommandResult.failed(
-                REASON_BUSY, "pemberian pupuk otomatis sedang berjalan", state
-            )
-        # §8.2 langkah 1: trolley diam. Gerak otomatis/patroli yang sedang berhenti di stasiun
-        # juga dihitung, karena sebentar lagi jalan lagi (S4).
-        trolley = self.trolley
-        if self.is_on(PATROL) or self._goto_active or trolley.busy or trolley.running is not False:
-            return CommandResult.failed(
-                REASON_INTERLOCK_EXCLUSIVE,
-                "trolley sedang dipakai, tunggu sampai berhenti",
-                state,
-            )
-        refusal = self.dosing.readiness()
-        if refusal is not None:
-            return CommandResult.failed(refusal.reason, refusal.text, state)
-        self.dosing.start(target, phase)
-        return CommandResult(True, "ON")
 
     # --- alert hasil (Kontrak §4.4) -----------------------------------------------------------
 

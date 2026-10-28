@@ -399,50 +399,8 @@ async def test_agent_executes_virtual_trolley_command(config, hal, clock):
         )
         await drive(clock, _until(lambda: transport.messages("RIO-TANK-01/command/ack")))
         [(_, ack)] = transport.messages("RIO-TANK-01/command/ack")
-        # F9: DOSE_TO_TARGET tanpa targetEc/phase ditolak di depan, loop tidak mulai.
-        assert ack["success"] is False and ack["errorMessage"].startswith("INVALID")
-        assert agent.dosing is not None and not agent.dosing.running
-    finally:
-        stop.set()
-        await asyncio.wait_for(task, 1)
-
-
-async def test_agent_runs_and_stops_dosing_loop(config, hal, clock):
-    # F9 lewat MQTT: ACK ON saat loop mulai, status RIO-TANK-01 DOSING-LOOP ON, STOP → ACK OFF.
-    transport = FakeTransport()
-    agent = Agent(config, hal, transport=transport)
-    stop = asyncio.Event()
-    task = asyncio.create_task(agent.run(stop))
-    try:
-        await drive(clock, agent.ready.wait())
-        await drive(clock, _until(agent.outputs.float_ok))  # S8: float sudah terbaca
-        transport.published.clear()
-        transport.deliver(
-            "fertimata/RIO-TANK-01/command",
-            {
-                "commandUid": "dose-1",
-                "actuatorCode": "DOSING-LOOP",
-                "command": "DOSE_TO_TARGET",
-                "parameters": {"targetEc": 2.2, "phase": "buah_muda"},
-            },
-        )
-        await drive(clock, _until(lambda: transport.messages("RIO-TANK-01/command/ack")))
-        [(_, ack)] = transport.messages("RIO-TANK-01/command/ack")
-        assert ack["success"] is True and ack["actuatorState"] == "ON"
-        await drive(clock, _until(lambda: hal.world.output_on("stirrer")), step=0.05)
-        statuses = [p["actuators"] for _, p in transport.messages("RIO-TANK-01/status")]
-        assert any(s.get("DOSING-LOOP") == "ON" for s in statuses)
-
-        transport.deliver(
-            "fertimata/RIO-TANK-01/command",
-            {"commandUid": "dose-2", "actuatorCode": "DOSING-LOOP", "command": "STOP"},
-        )
-        await drive(clock, _until(lambda: len(transport.messages("RIO-TANK-01/command/ack")) == 2))
-        ack = transport.messages("RIO-TANK-01/command/ack")[-1][1]
-        assert ack["success"] is True and ack["actuatorState"] == "OFF"
-        assert not hal.world.output_on("stirrer") and not agent.dosing.running
-        last = transport.messages("RIO-TANK-01/status")[-1][1]["actuators"]
-        assert last["DOSING-LOOP"] == "OFF" and last["STIRRER"] == "OFF"
+        # Loop dosing dipindah ke layanan tim AI (28 Okt): DOSING-LOOP bukan aktuator edge lagi.
+        assert ack["success"] is False and ack["errorMessage"].startswith("UNSUPPORTED")
     finally:
         stop.set()
         await asyncio.wait_for(task, 1)

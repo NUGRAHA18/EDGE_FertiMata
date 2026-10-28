@@ -189,12 +189,14 @@ sidecar **sesudah** foto. Layanan AI (D6) cukup memproses foto yang `.json`-nya 
 `blurry: true`, karena data riset tidak dibuang edge. Hasil inferensi AI dikirim ke
 `fertimata/JETSON-01/ai`. Model AI tidak termasuk lingkup awal repo ini (lihat TASKS F12).
 
-### 4.7 Loop dosing (tahap akhir)
+### 4.7 Loop dosing (bukan tugas edge)
 
-Loop tertutup berbasis EC (§8.2): aduk → baca pH/EC/suhu → hitung ΔEC → dosis 30–50% per iterasi
-N → P → K satu per satu → aduk → ulang (maks 6). Karena butuh pembacaan cepat dan berurutan, loop ini
-paling aman dijalankan **di edge**, dipicu satu perintah tingkat tinggi dari backend. Kontrak perintah
-ini belum ada di backend (keputusan D2).
+Keputusan 28 Okt 2026: campur pupuk otomatis (loop EC §8.2) dan penjadwalan penyiraman/dosing adalah
+layanan terpisah milik tim AI yang memanggil API backend. Layanan itu memakai perintah relay mentah
+`DOSING-N/P/K`, `STIRRER`, `DIST-PUMP` (`ON` + `durationSeconds`, `OFF`) dan membaca `tank.ec`/`tank.ph`
+dari telemetri. Edge hanya menjalankan perintah itu dengan aturan keselamatannya sendiri (S2 batas
+durasi, S4–S6 eksklusif, S7 daya, S8 float, S19 baca balik). Implementasi loop di edge (F9) masih ada
+di commit `9f0990e` bila nanti dibutuhkan lagi.
 
 ---
 

@@ -19,7 +19,6 @@ from .bus import BusManager
 from .captures import CaptureStore
 from .commands import CommandHandler, CommandRouter, OutputCommandHandler
 from .config import Config
-from .dosing import DosingLoop
 from .hal import Hal
 from .health import DeviceHealth
 from .link import Link, MqttTransport
@@ -110,12 +109,6 @@ class Agent:
         )
         if self.patrol is not None:
             self.poller.read_listeners.append(self.patrol.on_read)
-        # Loop dosing F9 (Kontrak §5.1 DOSING-LOOP), dijalankan lewat aktuator virtual.
-        self.dosing = (
-            DosingLoop(config, self.outputs, self.safety, self.analog, hal.clock, self.link)
-            if "dosing_loop" in config.virtual_actuators
-            else None
-        )
         self.virtual = (
             VirtualActuators(
                 config,
@@ -124,7 +117,6 @@ class Agent:
                 self.safety,
                 hal.clock,
                 sink=self.link,
-                dosing=self.dosing,
             )
             if self.trolley is not None and config.virtual_actuators
             else None

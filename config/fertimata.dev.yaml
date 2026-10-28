@@ -130,7 +130,6 @@ outputs:                    # actuator_code = kode aktuator di katalog backend
 virtual_actuators:
   trolley_goto:   {actuator_code: TROLLEY-GOTO,   device: JETSON-01, label: posisi trolley}
   trolley_patrol: {actuator_code: TROLLEY-PATROL, device: JETSON-01, label: patroli kamera}
-  dosing_loop:    {actuator_code: DOSING-LOOP,    device: RIO-TANK-01, label: pemberian pupuk otomatis}
 
 inputs:
   float_low_ok: {device: relay_t, input: 1, metric: tank.float_low_ok}   # tertutup = air cukup
@@ -221,30 +220,6 @@ power:                      # §7.4, §7.5
   soc_warn_c: 80
   soc_thermal_glob: /sys/class/thermal/thermal_zone*/temp
 
-dosing:                     # loop dosing §8.2 (F9), dipicu DOSING-LOOP DOSE_TO_TARGET
-  pumps: {n: dose_n, p: dose_p, k: dose_k}   # urutan dosis N → P → K, satu pompa dalam satu waktu
-  stirrer_output: stirrer
-  target_ec_ms_cm: [0.5, 4.0]   # targetEc yang diterima (Kontrak §5.1)
-  # Angka di bawah HANYA untuk simulator (FakeWorld memakai angka yang sama sebagai "kenyataan"),
-  # bukan hasil P-H12.
-  drum_volume_l: 150
-  pump_flow_ml_s: {n: 1.0, p: 1.0, k: 1.0}
-  ec_gain_ms_cm_per_ml_l: {n: 0.25, p: 0.25, k: 0.25}
-  stock_g_l:      {n: null, p: null, k: null}
-  stir_s: 90                    # §8.2 langkah 8: aduk 60–120 s
-  min_pump_s: 0.5               # dosis lebih singkat dari ini dilewati
-  max_iterations: 8             # §8.2 langkah 9: maksimal 5–8 iterasi
-  fraction_per_iteration: 0.4   # §8.2 langkah 6: 30–50 % ΔEC per iterasi
-  ec_tolerance_ms_cm: 0.05      # §8.2 langkah 4: ΔEC ≤ 0,05 → selesai
-  stable_interval_s: 20         # jarak dua bacaan EC saat menunggu stabil
-  stable_delta_ms_cm: 0.02      # dua bacaan berurutan berbeda ≤ ini = stabil
-  stable_max_reads: 6           # tidak stabil setelah sekian bacaan → loop berhenti
-  guard_s: 1                    # prasyarat dicek ulang tiap detik selama menunggu
-  ratio:                        # N:P:K per fase (§8.2 langkah 5), kunci = phase dari backend
-    vegetatif:       [5.4, 1, 6.3]
-    buah_muda:       [4.1, 1, 7.9]
-    pembesaran_buah: [5.4, 1, 4.7]
-
 fake:                       # parameter simulator (bukan angka hardware)
   tick_s: 0.05
   seed: 42
@@ -258,3 +233,10 @@ fake:                       # parameter simulator (bukan angka hardware)
   image_width: 64
   image_height: 48
   image_sharpness: 150
+  # Pompa pupuk di simulator (bukan hasil P-H12): perintah mentah DOSING-N/P/K menaikkan EC drum.
+  tank_volume_l: 150
+  stirrer_output: stirrer
+  dose_pumps:
+    dose_n: {flow_ml_s: 1.0, ec_gain_ms_cm_per_ml_l: 0.25}
+    dose_p: {flow_ml_s: 1.0, ec_gain_ms_cm_per_ml_l: 0.25}
+    dose_k: {flow_ml_s: 1.0, ec_gain_ms_cm_per_ml_l: 0.25}

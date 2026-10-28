@@ -38,7 +38,7 @@ Diambil dari Arsitektur §15. Setiap hasil ditulis ke `config/fertimata.yaml`, *
 | P-H9 | Nomor pin GPIO reed, HOME, END dari papan GPIO; versi libgpiod di Jetson | Dari pembuat papan; `gpioinfo`, `gpiodetect` | F7 |
 | P-H10 | Kamera: VID:PID, format/resolusi, kontrol exposure/WB yang tersedia | `lsusb`, `v4l2-ctl --list-formats-ext`, `v4l2-ctl -l` | F8 |
 | P-H11 | Baseline arus panel saat pompa OFF, arus nominal pompa | Baca PZEM saat komisioning. Isi `power.pump_baseline_a`, `power.pump_nominal_a`, lalu sesuaikan `ssr_short_margin_a` dengan noise bacaan | F5 (alert arus) |
-| P-H12 | Volume kerja drum, debit tiap pompa peristaltik (3 ulangan), konsentrasi stok | Gelas ukur + stopwatch, Protokol §8 | F9 |
+| P-H12 | Volume kerja drum, debit tiap pompa peristaltik (3 ulangan), konsentrasi stok | Gelas ukur + stopwatch, Protokol §8 | Layanan dosing tim AI (dulu F9) |
 | P-H13 | Kalibrasi EC (1413 µS/cm, 12,88 mS/cm) dan pH (4,01 · 6,86 · 9,18) | Kit DFR0300 + buffer. Pakai `tools/calibrate_ec_ph.py --point ec1413|ec12880|ph401|ph686|ph918 --write` (agent dihentikan dulu); hasilnya masuk `analog.ec.cal` (mV, setara 25 °C) dan `analog.ph.cal` | F6 (nilai akhir) |
 | P-H14 | Jam Jetson tersinkron NTP; baterai RTC | `timedatectl` | F2 (expiresAt) |
 | P-H15 | Hardware watchdog Jetson bisa dipakai systemd | `ls /dev/watchdog*` | F10 |

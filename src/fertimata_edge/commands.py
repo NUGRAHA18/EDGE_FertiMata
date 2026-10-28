@@ -37,7 +37,6 @@ RELAY_ACTIONS = frozenset({"ON", "OFF"})
 VIRTUAL_ACTIONS: dict[str, frozenset[str]] = {
     "trolley_goto": frozenset({"HOME", "GOTO_STATION", "STOP"}),
     "trolley_patrol": frozenset({"START", "STOP"}),
-    "dosing_loop": frozenset({"DOSE_TO_TARGET", "STOP"}),
 }
 
 

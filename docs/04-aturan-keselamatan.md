@@ -16,7 +16,7 @@ Sumber: Arsitektur §5.3, §5.4, §6, §7.4, §7.5, §9, §12, dan kebijakan int
 | S6 | Hanya satu pompa peristaltik ON dalam satu waktu | idem | |
 | S7 | Saat `powerSource ≠ MAINS`: hentikan dan blokir dosing, aduk, trolley, pompa distribusi | `power` memicu `emergency_stop(group)` | simulasi PZEM padam |
 | S8 | Float LOW terbuka (atau bacaan IN1 gagal/basi) → blokir pompa distribusi, dosing, aduk | `safety.float` | IN1 terbuka, IN1 timeout |
-| S9 | Bacaan EC/pH tidak valid → dosing dilarang | `analog` menandai invalid (`AnalogReading.valid_for_dosing`); loop dosing F9 (`dosing.py`) berhenti `DOSING_FAILED` sebelum dosis | nilai di luar `analog.valid` → dibuang + `EC_PH_INVALID`; pH 15,5 → loop berhenti tanpa dosis |
+| S9 | Bacaan EC/pH tidak valid → dosing dilarang | `analog` menandai invalid (`AnalogReading.valid_for_dosing`), nilai invalid tidak dikirim di telemetri + `EC_PH_INVALID`. Sejak 28 Okt loop dosing milik layanan tim AI (lewat perintah mentah `DOSING-N/P/K`), jadi **layanan itu** yang wajib menahan dosis saat `tank.ec`/`tank.ph`/`tank.water_temperature` hilang atau basi (keputusan user 28 Okt: **sementara** S9 dijaga tim AI, lihat Q8 di TASKS). Edge tidak menolak perintah mentah berdasarkan bacaan larutan (belum pernah, juga sebelum F9 dihapus) | nilai di luar `analog.valid` → dibuang + `EC_PH_INVALID` |
 | S10 | Arus di atas baseline saat R0 OFF → alert keras `SSR_SHORT` | `power` | |
 | S11 | Arus jauh di bawah nominal saat R0 ON → matikan R0 + `PUMP_DRY_RUN` | `power` | |
 | S12 | **DIR (R3) tidak pernah diubah saat RUN (R2) ON.** Jalan: R2 OFF → R3 → 100 ms → R2 ON. Berhenti: R2 OFF → 300 ms sebelum R3 boleh berubah | `trolley` + `safety` | perintah DIR saat RUN ON → ditolak |
@@ -47,6 +47,5 @@ Sumber: Arsitektur §5.3, §5.4, §6, §7.4, §7.5, §9, §12, dan kebijakan int
   dibuka dengan me-restart agent setelah panel diperiksa.
 - Test per aturan: `tests/test_outputs.py` (S1, S2, S8 reaksi, S14 jeda polling, S19) dan `tests/test_safety.py`
   (S3–S6, S8, S12, S13, S14, S16). S7 dan S10/S11 di `tests/test_power.py`, S9 di `tests/test_analog.py`,
-  S12/S13/S15/S16 untuk gerak trolley di `tests/test_trolley.py`. Loop dosing F9 (S2 potong `max_on_s`, S3 STOP,
-  S4–S6 tahanan trolley/pompa siram + satu pompa, S7/S8 di tengah loop, S9) di `tests/test_dosing.py`.
+  S12/S13/S15/S16 untuk gerak trolley di `tests/test_trolley.py`.
   S17 di `tests/test_link.py`, S18 di `tests/test_codebase_rules.py`.

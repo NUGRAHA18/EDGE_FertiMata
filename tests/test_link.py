@@ -287,7 +287,8 @@ async def test_dedup_memory_is_bounded(setup, clock, config):
             "UNSUPPORTED",
         ),
         (
-            "fertimata/JETSON-01/command",
+            # Loop dosing dipindah ke layanan tim AI (28 Okt).
+            "fertimata/RIO-TANK-01/command",
             {"actuatorCode": "DOSING-LOOP", "command": "DOSE_TO_TARGET"},
             "UNSUPPORTED",
         ),

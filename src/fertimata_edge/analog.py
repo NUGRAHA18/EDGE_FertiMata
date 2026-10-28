@@ -13,7 +13,7 @@ Konversi:
   suhu mutlak) di sekitar pH 7.
 
 S9: nilai di luar `analog.valid` dibuang dari telemetri, alert `EC_PH_INVALID`, dan bacaan
-ditandai tidak layak untuk dosing (F9).
+ditandai tidak layak untuk dosing (`valid_for_dosing`).
 """
 
 from __future__ import annotations
@@ -168,19 +168,6 @@ class AnalogReader:
     def _configured(self, channel) -> bool:
         return f"a{channel.ch}" in self._adc[channel.device].registers
 
-    def missing_for_dosing(self) -> list[str]:
-        """Kunci config yang belum diisi sehingga bacaan tidak akan pernah layak dosing (S9)."""
-        missing = [
-            f"devices.{channel.device}.registers.a{channel.ch}"
-            for channel in (self.analog.ec, self.analog.ph)
-            if not self._configured(channel)
-        ]
-        if TEMPERATURE_FIELD not in self._temperature.registers:
-            missing.append(f"devices.{self._temperature.name}.registers.{TEMPERATURE_FIELD}")
-        if len(self.analog.ph.cal.points()) < 2:
-            missing.append("analog.ph.cal")
-        return missing
-
     async def _sample(self, channel) -> float | None:
         name = f"a{channel.ch}"
         values = []
@@ -225,7 +212,7 @@ class AnalogReader:
         return values.get(TEMPERATURE_FIELD)
 
     async def measure(self) -> AnalogReading:
-        """Satu siklus §6.3. Juga dipakai loop dosing (F9) untuk bacaan di luar jadwal."""
+        """Satu siklus §6.3."""
         async with self._lock:
             ph_mv, ec_mv = await self._read_voltages(
                 self._configured(self.analog.ph), self._configured(self.analog.ec)

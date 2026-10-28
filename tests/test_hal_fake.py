@@ -133,6 +133,25 @@ async def test_pzem_registers_and_pump_current(hal, config):
     assert _u32(regs[1], regs[2]) / 1000 == pytest.approx(expected)
 
 
+async def test_dose_pump_raises_tank_ec_after_mixing(hal, config):
+    # Perintah mentah DOSING-N dari layanan dosing tim AI harus terlihat di EC simulator.
+    await _open(hal)
+    world, out = hal.world, config.outputs["dose_n"]
+    pump = config.fake.dose_pumps["dose_n"]
+    before = world.tank_ec_ms_cm
+    address = config.devices[out.device].address
+    await hal.bus.write_coil(address, out.ch, True)
+    world.step(10.0)
+    await hal.bus.write_coil(address, out.ch, False)
+    assert world.dosed_ml["dose_n"] == pytest.approx(10 * pump.flow_ml_s)
+    stirrer = config.outputs["stirrer"]
+    await hal.bus.write_coil(config.devices[stirrer.device].address, stirrer.ch, True)
+    for _ in range(100):
+        world.step(1.0)
+    rise = 10 * pump.flow_ml_s * pump.ec_gain_ms_cm_per_ml_l / config.fake.tank_volume_l
+    assert world.tank_ec_ms_cm - before == pytest.approx(rise, rel=0.05)
+
+
 async def test_pzem_energy_accumulates_in_wh(hal):
     await _open(hal)
     hal.world.step(3600.0)

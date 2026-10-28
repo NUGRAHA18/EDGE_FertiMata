@@ -120,17 +120,15 @@ class FakeWorld:
             )
         self._update_analog()
 
-        # Loop dosing F9: pompa pupuk menambah stok ke drum. "Kenyataan" simulator memakai angka
-        # config dosing (debit, kenaikan EC per mL/L, volume); test boleh mengubahnya untuk
-        # meniru stok habis atau selang tersumbat. Stok baru terbaca probe setelah tercampur.
-        dosing = config.dosing
-        self.tank_volume_l = dosing.drum_volume_l or 0.0
-        self.dose_flow_ml_s: dict[str, float] = {}
-        self.dose_ec_gain: dict[str, float] = {}
-        for key in ("n", "p", "k"):
-            name = getattr(dosing.pumps, key)
-            self.dose_flow_ml_s[name] = getattr(dosing.pump_flow_ml_s, key) or 0.0
-            self.dose_ec_gain[name] = getattr(dosing.ec_gain_ms_cm_per_ml_l, key) or 0.0
+        # Pompa pupuk menambah stok ke drum (perintah mentah DOSING-N/P/K); test boleh mengubah
+        # debit untuk meniru stok habis atau selang tersumbat. Stok baru terbaca probe setelah
+        # tercampur.
+        fake = config.fake
+        self.tank_volume_l = fake.tank_volume_l
+        self.dose_flow_ml_s = {name: pump.flow_ml_s for name, pump in fake.dose_pumps.items()}
+        self.dose_ec_gain = {
+            name: pump.ec_gain_ms_cm_per_ml_l for name, pump in fake.dose_pumps.items()
+        }
         self.dosed_ml: dict[str, float] = dict.fromkeys(self.dose_flow_ml_s, 0.0)
         self.unmixed_ec_ms_cm = 0.0
 
@@ -274,8 +272,8 @@ class FakeWorld:
                 self.dosed_ml[name] += ml
                 if self.tank_volume_l > 0:
                     self.unmixed_ec_ms_cm += ml * self.dose_ec_gain[name] / self.tank_volume_l
-        stirrer = cfg.dosing.stirrer_output
-        stirring = stirrer in cfg.outputs and self.output_on(stirrer)
+        stirrer = cfg.fake.stirrer_output
+        stirring = stirrer is not None and stirrer in cfg.outputs and self.output_on(stirrer)
         tau = cfg.fake.mix_tau_s if stirring else cfg.fake.mix_idle_tau_s
         moved = self.unmixed_ec_ms_cm * min(1.0, dt / tau)
         self.tank_ec_ms_cm += moved

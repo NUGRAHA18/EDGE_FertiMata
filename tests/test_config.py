@@ -96,7 +96,12 @@ RELAY_A = {"write_fc": 5, "write_base": 0, "read_fc": 1, "read_base": 0}
         (lambda d: d["power"].update(restore_voltage_v=170), "histeresis"),
         (lambda d: d["camera"].update(patrol_schedule=[1140]), "camera.patrol_schedule"),
         (lambda d: d["camera"].update(patrol_schedule=["7:00"]), "HH:MM"),
-        (lambda d: d["dosing"].update(fraction_per_iteration=1.5), "dosing.fraction_per_iteration"),
+        (
+            lambda d: d["fake"]["dose_pumps"].update(
+                dose_x={"flow_ml_s": 1, "ec_gain_ms_cm_per_ml_l": 1}
+            ),
+            "dose_x",
+        ),
         (lambda d: d["devices"]["relay_p"].pop("relay"), "wajib punya 'relay'"),
         (lambda d: d["devices"]["air"].update(relay=RELAY_A), "hanya untuk profil relay_mb"),
         (lambda d: d["devices"]["relay_p"]["relay"].update(write_fc=6), "on_value dan off_value"),

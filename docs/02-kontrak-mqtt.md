@@ -8,8 +8,14 @@
 > **Pembaruan 26 Oktober 2026:** BE-1…BE-4 (aktuator virtual, `/captures/**`, interval telemetri per
 > device, metrik `dosing.*`) dari sesi backend, branch `feat/edge-alignment-be5-be7` (belum di-commit).
 > Edge menjalankan `TROLLEY-GOTO` dan `TROLLEY-PATROL` sejak 26 Okt (F7.5, F8.4, `virtual.py`).
-> `DOSING-LOOP` dijalankan edge sejak 28 Okt (F9, `dosing.py`); angka pompa/drum P-H12 masih kosong di
-> config contoh, jadi di lapangan perintahnya dijawab `NOT_CONFIGURED` sampai komisioning.
+>
+> **Pembaruan 28 Oktober 2026 (keputusan user):** campur pupuk otomatis dan penjadwalan
+> penyiraman/dosing **bukan** tugas edge maupun backend. Keduanya menjadi layanan terpisah milik tim
+> AI yang memanggil API backend (`POST /api/actuators/{id}/commands`) dengan perintah relay mentah
+> `DOSING-N/P/K`, `STIRRER`, `DIST-PUMP` (`ON` + `durationSeconds`, `OFF`). Aktuator virtual
+> `DOSING-LOOP`, metrik `dosing.*`, dan alert `DOSING_*` dihapus dari katalog (migrasi backend V9)
+> dan dari edge (loop F9 ada di commit `9f0990e` bila dibutuhkan lagi). Interlock backend dan edge
+> (S2, S4–S8, S19) tetap berlaku untuk perintah mentah itu.
 
 ---
 
@@ -53,7 +59,7 @@ terlihat beda dengan Jetson mati.
 | `PZEM-01` | Modbus 30 | `mains.voltage`, `mains.frequency`, `mains.current`, `mains.power`, `mains.energy` (kWh), `mains.power_factor` | — |
 | `PANEL-01` | Modbus 20 (relay 4-ch) | — | `DIST-PUMP` R0, `CAMERA-PAN` R1, `TROLLEY-RUN` R2, `TROLLEY-DIR` R3 |
 | `GREENHOUSE-01` | Modbus 1, 3, 4 | `soil_a.moisture`, `soil_a.temperature`, `soil_a.ec` (µS/cm), `soil_a.ph`, `soil_a.nitrogen`, `soil_a.phosphorus`, `soil_a.potassium` (mg/kg), `air.temperature`, `air.humidity`, `light.illuminance` | — |
-| `RIO-TANK-01` | Modbus 6, 10, 21 | `tank.ec` (mS/cm, sudah dikompensasi 25 °C), `tank.ph`, `tank.water_temperature`, `tank.float_low_ok`; loop dosing (BE-4, F9.4): `dosing.iteration`, `dosing.ec_target`, `dosing.ec_measured` (mS/cm), `dosing.n_ml`, `dosing.p_ml`, `dosing.k_ml` (ml) | `DOSING-N` R0, `DOSING-P` R1, `DOSING-K` R2, `STIRRER` R4, `EC-POWER` R5; virtual: `DOSING-LOOP` (§5.1) |
+| `RIO-TANK-01` | Modbus 6, 10, 21 | `tank.ec` (mS/cm, sudah dikompensasi 25 °C), `tank.ph`, `tank.water_temperature`, `tank.float_low_ok` | `DOSING-N` R0, `DOSING-P` R1, `DOSING-K` R2, `STIRRER` R4, `EC-POWER` R5 |
 
 Interval telemetri yang diharapkan backend (BE-3, `app.metrics.device-intervals`), satu pesan per
 kelompok polling (`polling.*` edge):
@@ -102,7 +108,7 @@ atau 0.
 | Field | Aturan |
 |---|---|
 | `powerSource` | Dikirim di `JETSON-01` saja. `MAINS` / `BATTERY` / `UNKNOWN`. Selain `MAINS` dianggap daya cadangan oleh backend. Field dihilangkan selama edge belum punya data daya (sebelum bacaan PZEM pertama); backend lalu mempertahankan nilai terakhir. Dikirim juga setiap kali berubah |
-| `actuators` | State **hasil baca balik relay**, `"ON"`/`"OFF"`. Wajib dikirim setiap kali state berubah tanpa ACK (timer habis, watchdog, darurat) dan berkala. Aktuator virtual (§5.1) ikut dilaporkan: `TROLLEY-PATROL`/`TROLLEY-GOTO` di `JETSON-01`, `DOSING-LOOP` di `RIO-TANK-01`; `"ON"` selama urutannya berjalan. Backend memakai state ini untuk interlock |
+| `actuators` | State **hasil baca balik relay**, `"ON"`/`"OFF"`. Wajib dikirim setiap kali state berubah tanpa ACK (timer habis, watchdog, darurat) dan berkala. Aktuator virtual (§5.1) ikut dilaporkan: `TROLLEY-PATROL`/`TROLLEY-GOTO` di `JETSON-01`; `"ON"` selama urutannya berjalan. Backend memakai state ini untuk interlock |
 | `status`, `metadata` | Opsional |
 
 Interval: usulan 30 s per device (backend `DEVICE_OFFLINE_TIMEOUT_SECONDS=120`). Device yang perangkat
@@ -140,7 +146,7 @@ Modbus-nya tidak menjawab **tidak** diberi heartbeat.
 device sama) selama alert belum ditandai ditangani, jadi edge boleh mengulang alert tanpa membanjiri
 dashboard. Meski begitu, edge memberi jeda `mqtt.alert_repeat_s` per tipe. **INFO selalu dicatat**
 backend (sejak 26 Okt, BE-1) dan tidak dijeda edge: dipakai untuk hasil satu kejadian (`PATROL_DONE`,
-`TROLLEY_ARRIVED`, `DOSING_DONE`), bukan kondisi yang berulang.
+`TROLLEY_ARRIVED`), bukan kondisi yang berulang.
 
 Tipe yang direncanakan:
 
@@ -163,12 +169,9 @@ Tipe yang direncanakan:
 | `DISK_FULL` | JETSON-01 | CRITICAL | Ruang disk < `camera.disk_stop_free_gb`: foto tidak disimpan. Data lama tidak dihapus otomatis |
 | `SOC_HOT` | JETSON-01 | WARNING | Suhu SoC mendekati batas |
 | `EC_PH_INVALID` | RIO-TANK-01 | WARNING | Bacaan di luar rentang fisik |
-| `DOSING_NOT_CONVERGING` | RIO-TANK-01 | WARNING | Loop dosing mencapai `dosing.max_iterations` tanpa sampai target (`metadata` sama dengan `DOSING_DONE`) |
-| `DOSING_FAILED` | RIO-TANK-01 | WARNING | Loop dosing berhenti di tengah karena prasyarat hilang (`metadata.reason`: `INTERLOCK_POWER`, `INTERLOCK_FLOAT`, `INTERLOCK_EXCLUSIVE`, `EC_PH_INVALID`, `EC_UNSTABLE`, `DOSING_INTERRUPTED`, `OUTPUT_FAULT`, `RELAY_MISMATCH`, `DEVICE_OFFLINE`, …). Semua pompa pupuk dan aduk sudah OFF. `STOP` dari aplikasi tidak memicu alert. Tipe bebas di backend |
 | `PATROL_DONE` | JETSON-01 | INFO | Patroli selesai atau dihentikan dari aplikasi (`metadata.status` `OK`/`PARTIAL`/`STOPPED`, `saved`, `missed`, `blurry`, `patrolId`, `trigger` `schedule`/`manual`). Tipe bebas di backend (≤ 64 karakter), disetujui sesi backend |
 | `TROLLEY_ARRIVED` | JETSON-01 | INFO | `HOME`/`GOTO_STATION` selesai (`metadata.station`, 0 = HOME) |
 | `TROLLEY_GOTO_FAILED` | JETSON-01 | WARNING | `HOME`/`GOTO_STATION` tidak sampai karena sebab yang belum punya alert sendiri (mis. RUN dimatikan lewat relay mentah, ditolak interlock saat jalan). `TROLLEY_NO_REED`/`TIMEOUT`/`LIMIT_HIT`/`LIMIT_WIRE` tidak diulang. `STOP` dari aplikasi tidak memicu alert |
-| `DOSING_DONE` | RIO-TANK-01 | INFO | `DOSE_TO_TARGET` mencapai target, termasuk EC yang sejak awal sudah ≥ target (tanpa dosis). `metadata`: `phase`, `iterations`, `ecTarget`, `ecFinal`, `ph`, `waterTemperature`, `nMl`, `pMl`, `kMl` (total) |
 
 ### 4.5 Hasil AI (tahap lanjut)
 
@@ -205,13 +208,12 @@ Backend menolak (400) `command` di luar kosakata per tipe aktuator: relay mentah
 
 ### 5.1 Aktuator virtual (BE-1, keputusan D2)
 
-Tidak memakai `durationSeconds`: batas waktu dipegang edge (S2, S15, batas iterasi dosing).
+Tidak memakai `durationSeconds`: batas waktu dipegang edge (S2, S15).
 
 | Aktuator (device) | Tipe katalog | `command` | `parameters` | Arti di edge |
 |---|---|---|---|---|
 | `TROLLEY-PATROL` (`JETSON-01`) | `TROLLEY_PATROL` | `START` / `STOP` | — | `START` = patroli manual (`Patrol.run(trigger="manual")`, F8.4). `STOP` = batalkan, trolley berhenti di tempat (tidak pulang ke HOME), ACK `OFF` setelah patroli benar-benar berhenti (jeda getaran/pan diputus saat STOP, jadi biasanya < 1 s; paling lama satu pengambilan foto yang sedang berjalan + pan kembali ke timur). State `ON` juga selama patroli **terjadwal** |
 | `TROLLEY-GOTO` (`JETSON-01`) | `TROLLEY_POSITION` | `HOME` / `GOTO_STATION` / `STOP` | `GOTO_STATION`: `{"station": 1..10}` (integer JSON, wajib) | `homing()` / `goto_station(n)` (F7.5). `STOP` = RUN OFF |
-| `DOSING-LOOP` (`RIO-TANK-01`) | `DOSING_LOOP` | `DOSE_TO_TARGET` / `STOP` | `{"targetEc": 0.5..4.0 (mS/cm, angka JSON), "phase": "vegetatif" \| "buah_muda" \| "pembesaran_buah"}` (rentang = `dosing.target_ec_ms_cm`, fase = kunci `dosing.ratio`) | Loop dosing §8.2 (F9, `dosing.py`). Telemetri `dosing.*` satu pesan per iterasi (`*_ml` = dosis iterasi itu). `STOP` = hentikan loop, semua pompa pupuk + aduk OFF (juga yang dinyalakan relay mentah), ACK `OFF` setelah semuanya mati |
 
 Pemeriksaan edge sebelum ACK sukses (gagal → ACK `success=false`, state tetap `OFF`):
 
@@ -222,24 +224,17 @@ Pemeriksaan edge sebelum ACK sukses (gagal → ACK `success=false`, state tetap 
 | `BUSY` | Patroli (manual/terjadwal) atau `TROLLEY-GOTO` lain sedang jalan, atau trolley sedang digerakkan relay mentah |
 | `INTERLOCK_POWER`, `INTERLOCK_EXCLUSIVE`, `OUTPUT_FAULT` | Sama dengan aturan `TROLLEY-RUN` ON (S7, S4–S6, S19) |
 | `DISK_FULL` | `START` saat ruang foto di bawah `camera.disk_stop_free_gb` |
-| `INVALID` (dosing) | `targetEc` bukan angka dalam rentang atau `phase` tidak dikenal |
-| `BUSY` (dosing) | Loop dosing sudah berjalan |
-| `NOT_CONFIGURED` | Angka P-H12 (volume drum, debit pompa, kenaikan EC per mL stok) atau register ADC/kalibrasi pH belum diisi di config edge |
-| `INTERLOCK_EXCLUSIVE` (dosing) | Trolley bergerak/dipakai (patroli, `TROLLEY-GOTO`, gerak mentah), pompa siram ON, atau pompa pupuk lain menyala mentah. Selama loop berjalan, sebaliknya `TROLLEY-GOTO`/`TROLLEY-PATROL`, `TROLLEY-RUN` ON, dan `DIST-PUMP` ON dijawab `INTERLOCK_EXCLUSIVE`; `DOSING-N/P/K` dan `STIRRER` ON mentah dijawab `BUSY` |
-| `INTERLOCK_FLOAT` | `DOSE_TO_TARGET` saat float LOW terbuka/basi (S8) |
 
 `STOP` tidak pernah ditolak dan selalu mematikan `TROLLEY-RUN` (prioritas STOP), juga bila tidak ada
-urutan virtual yang berjalan. `STOP` ke `DOSING-LOOP` mematikan semua pompa pupuk dan aduk. Selama urutan berjalan, `TROLLEY-DIR`, `CAMERA-PAN`, dan `TROLLEY-RUN` ON
+urutan virtual yang berjalan. Selama urutan berjalan, `TROLLEY-DIR`, `CAMERA-PAN`, dan `TROLLEY-RUN` ON
 mentah dijawab `BUSY`.
 
 Interlock di backend (edge tetap memeriksa ulang dengan aturannya sendiri):
 
-- Perintah pengaktif: `ON`, `START`, `HOME`, `GOTO_STATION`, `DOSE_TO_TARGET`. `STOP`/`OFF` tidak pernah
-  diblokir.
-- Semua tipe virtual diblokir saat daya cadangan; `DOSING_LOOP` juga diblokir `FLOAT_LOW`.
-- Eksklusif: `DOSING_LOOP` ⟷ `DOSING_PUMP`, `DISTRIBUTION_PUMP`, `TROLLEY_*`. `TROLLEY_PATROL`/`TROLLEY_POSITION`
-  ⟷ `DOSING_PUMP`, `STIRRER`, `TROLLEY_MOTOR`, dan satu sama lain. `DOSING_LOOP` **tidak** eksklusif
-  dengan `STIRRER` (loop memakai pompa aduk sendiri).
+- Perintah pengaktif: `ON`, `START`, `HOME`, `GOTO_STATION`. `STOP`/`OFF` tidak pernah diblokir.
+- Semua tipe virtual diblokir saat daya cadangan.
+- Eksklusif: `TROLLEY_PATROL`/`TROLLEY_POSITION` ⟷ `DOSING_PUMP`, `STIRRER`, `TROLLEY_MOTOR`, dan satu
+  sama lain.
 - `CAMERA_PAN` diblokir selama `TROLLEY_MOTOR`/`TROLLEY_PATROL`/`TROLLEY_POSITION` ON.
 
 Aturan edge:

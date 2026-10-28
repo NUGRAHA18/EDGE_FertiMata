@@ -108,6 +108,24 @@ async def test_s19_mismatch_tries_off_alerts_and_locks(rig):
     assert [w.value for w in writes[-2:]] == [True, False]
 
 
+async def test_poll_between_write_and_readback_is_not_s19(rig, monkeypatch):
+    # Baca polling yang dijalankan bus di antara tulis dan baca balik `set` sudah melihat kanal ON
+    # sebelum model diperbarui. Hasil itu basi dan tidak boleh dianggap "ON tanpa perintah".
+    out = rig.config.outputs["dose_n"]
+    profile = rig.outputs.profiles[out.device]
+    write = profile.write
+
+    async def write_then_poll(*args, **kwargs):
+        await write(*args, **kwargs)
+        await rig.outputs._check_device(out.device)
+
+    monkeypatch.setattr(profile, "write", write_then_poll)
+    result = await rig.run(rig.outputs.set("dose_n", True, duration_s=5))
+    assert result.ok and rig.physical("dose_n")
+    assert not rig.outputs.states["dose_n"].faulty
+    assert rig.sink.of_type("RELAY_MISMATCH") == []
+
+
 async def test_write_to_silent_relay_fails_with_offline_reason(rig):
     rig.world.set_device_online("relay_p", False)
     result = await rig.run(rig.outputs.set("pan_west", True))

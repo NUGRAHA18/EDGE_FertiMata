@@ -201,7 +201,7 @@ class Outputs:
             self._write_seq[out.device] += 1
             # Baca polling yang dimulai sesudah kenaikan di atas tapi dijalankan bus sesudah tulisan
             # ini melihat state baru sebelum model diperbarui; tanpa penanda ini ia dianggap
-            # "ON tanpa perintah" (S19 palsu, ditemukan test F9).
+            # "ON tanpa perintah" (S19 palsu).
             self._writing[out.device] += 1
             try:
                 try:

@@ -230,7 +230,7 @@ class VirtualActuatorConfig(_Model):
 
 
 # Jenis aktuator virtual yang dikenal edge (Kontrak §5.1).
-VirtualKind = Literal["trolley_goto", "trolley_patrol", "dosing_loop"]
+VirtualKind = Literal["trolley_goto", "trolley_patrol"]
 
 
 class RelayInputConfig(_Model):
@@ -471,83 +471,11 @@ class PowerConfig(_Model):
         return self
 
 
-class NpkValues(_Model):
-    n: float | None = Field(default=None, gt=0)
-    p: float | None = Field(default=None, gt=0)
-    k: float | None = Field(default=None, gt=0)
+class FakeDosePump(_Model):
+    """Pompa pupuk di simulator: debit dan kenaikan EC bila 1 mL stok masuk 1 L air."""
 
-
-class NpkOutputs(_Model):
-    """Nama output pompa stok N, P, K (Arsitektur §8.1: N = Calnit, P = MKP, K = SOP)."""
-
-    n: str
-    p: str
-    k: str
-
-
-class DosingConfig(_Model):
-    """Loop dosing tertutup berbasis EC (Arsitektur §8.2, F9).
-
-    Dosis per pompa: `ml = ΔEC_pompa × drum_volume_l / ec_gain_ms_cm_per_ml_l` lalu
-    `t = ml / pump_flow_ml_s`. Ini rumus §8.2 langkah 6 `t = (V × Δc) / (debit × konsentrasi_stok)`
-    dengan konsentrasi stok dinyatakan sebagai kenaikan EC per mL stok per liter air, karena loop
-    mengukur EC, bukan gram pupuk. Angka P-H12 boleh null: loop menolak `NOT_CONFIGURED`.
-    """
-
-    pumps: NpkOutputs
-    stirrer_output: str
-    # Rentang targetEc yang diterima (Kontrak §5.1). Bukan angka agronomi, hanya batas masuk akal.
-    target_ec_ms_cm: tuple[float, float]
-    drum_volume_l: float | None = Field(default=None, gt=0)
-    pump_flow_ml_s: NpkValues = NpkValues()
-    # Kenaikan EC (mS/cm, 25 °C) bila 1 mL stok dilarutkan ke 1 L air. Diukur saat meracik stok.
-    ec_gain_ms_cm_per_ml_l: NpkValues = NpkValues()
-    # Konsentrasi stok (g/L) dicatat untuk riset; hitungan memakai ec_gain_ms_cm_per_ml_l.
-    stock_g_l: NpkValues = NpkValues()
-    stir_s: float = Field(gt=0)
-    # Dosis yang lebih pendek dari ini dilewati (relay tidak bisa menyala sesingkat itu).
-    min_pump_s: float = Field(ge=0)
-    # §8.2 langkah 9: maksimal 5–8 iterasi (satu iterasi = aduk → baca → dosis).
-    max_iterations: int = Field(ge=1, le=8)
-    # §8.2 langkah 6: hanya 30–50 % ΔEC per iterasi; kesalahan arah selalu ke dosis kurang.
-    fraction_per_iteration: float = Field(ge=0.3, le=0.5)
-    ec_tolerance_ms_cm: float = Field(gt=0)
-    # §8.2 langkah 8: EC dianggap stabil bila dua bacaan berurutan (berjarak stable_interval_s)
-    # berbeda ≤ stable_delta_ms_cm. Tidak stabil setelah stable_max_reads bacaan → loop berhenti.
-    stable_interval_s: float = Field(ge=0)
-    stable_delta_ms_cm: float = Field(gt=0)
-    stable_max_reads: int = Field(ge=2)
-    # Selama menunggu (aduk, pompa, jeda baca) prasyarat dicek ulang tiap guard_s detik, supaya PLN
-    # padam/float/STOP menghentikan loop dengan cepat.
-    guard_s: float = Field(gt=0)
-    # Rasio N:P:K per fase; kunci = `phase` dari backend (Kontrak §5.1).
-    ratio: dict[str, tuple[float, float, float]] = Field(min_length=1)
-
-    @field_validator("ratio")
-    @classmethod
-    def _ratio_positive(
-        cls, value: dict[str, tuple[float, float, float]]
-    ) -> dict[str, tuple[float, float, float]]:
-        for phase, parts in value.items():
-            if any(part < 0 for part in parts) or sum(parts) <= 0:
-                raise ValueError(f"rasio fase '{phase}' harus ≥ 0 dan jumlahnya > 0")
-        return value
-
-    @model_validator(mode="after")
-    def _target_order(self) -> DosingConfig:
-        low, high = self.target_ec_ms_cm
-        if not 0 < low < high:
-            raise ValueError("target_ec_ms_cm harus [bawah, atas] dengan 0 < bawah < atas")
-        return self
-
-    @property
-    def missing(self) -> list[str]:
-        """Kunci P-H12 yang belum diisi (loop menolak berjalan selama ada)."""
-        names = [] if self.drum_volume_l is not None else ["drum_volume_l"]
-        for group in ("pump_flow_ml_s", "ec_gain_ms_cm_per_ml_l"):
-            values = getattr(self, group)
-            names += [f"{group}.{key}" for key in ("n", "p", "k") if getattr(values, key) is None]
-        return names
+    flow_ml_s: float = Field(gt=0)
+    ec_gain_ms_cm_per_ml_l: float = Field(gt=0)
 
 
 class FakeConfig(_Model):
@@ -570,8 +498,13 @@ class FakeConfig(_Model):
     ph_mv_per_ph: float = -180.0
     # Eksitasi papan EC mengganggu pH saat R5 ON (alasan urutan §6.3).
     ec_ph_interference_mv: float = 150.0
+    # Pompa pupuk (nama output → debit/kenaikan EC) menambah EC drum, supaya perintah mentah
+    # DOSING-N/P/K dari layanan dosing tim AI terlihat di telemetri. Kosong = EC drum tetap.
+    tank_volume_l: float = Field(default=150.0, gt=0)
+    dose_pumps: dict[str, FakeDosePump] = Field(default_factory=dict)
+    stirrer_output: str | None = None
     # Stok yang dipompa ke drum baru terbaca probe setelah tercampur: konstanta waktu campur saat
-    # pompa aduk menyala dan saat diam (alasan §8.2 langkah 8 "tunggu EC stabil").
+    # pompa aduk menyala dan saat diam (alasan Arsitektur §8.2 langkah 8 "tunggu EC stabil").
     mix_tau_s: float = Field(default=20.0, gt=0)
     mix_idle_tau_s: float = Field(default=600.0, gt=0)
     image_width: int = Field(default=64, gt=0)
@@ -599,7 +532,6 @@ class Config(_Model):
     trolley: TrolleyConfig
     camera: CameraConfig
     power: PowerConfig
-    dosing: DosingConfig
     fake: FakeConfig = FakeConfig()
 
     @model_validator(mode="after")
@@ -728,21 +660,10 @@ class Config(_Model):
             yield f"analog.power_output: '{self.analog.power_output}' tidak ada di outputs"
         if self.camera.pan_output not in self.outputs:
             yield f"camera.pan_output: '{self.camera.pan_output}' tidak ada di outputs"
-        dosing = self.dosing
-        own = {f"dosing.pumps.{k}": getattr(dosing.pumps, k) for k in ("n", "p", "k")}
-        own["dosing.stirrer_output"] = dosing.stirrer_output
-        for where, name in own.items():
+        fake = self.fake
+        for name in [*fake.dose_pumps, *([fake.stirrer_output] if fake.stirrer_output else [])]:
             if name not in self.outputs:
-                yield f"{where}: '{name}' tidak ada di outputs"
-        if len(set(own.values())) != len(own):
-            yield "dosing.pumps/stirrer_output: output tidak boleh dipakai dua kali"
-        stirrer = self.outputs.get(dosing.stirrer_output)
-        stir_limit = stirrer.max_on_s if stirrer is not None else None
-        if stir_limit is not None and dosing.stir_s > stir_limit:
-            yield (
-                f"dosing.stir_s: {dosing.stir_s:g} s melebihi max_on_s pompa aduk "
-                f"({stir_limit:g} s)"
-            )
+                yield f"fake: output '{name}' tidak ada di outputs"
 
         temp_dev = devices.get(self.analog.temperature_device)
         if temp_dev is None or temp_dev.profile != "ds18b20_mb":
