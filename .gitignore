@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Config lokal/produksi (contoh tetap di-commit)
+config/fertimata.yaml
+config/*.local.yaml
+
+# Data lapangan
+data/
+*.log
+
+# Berkas kunci/sementara Office
+~$*
+~WRL*.tmp

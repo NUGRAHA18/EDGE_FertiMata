@@ -1,0 +1,4 @@
+# Berkas yang dipakai langsung di Jetson harus LF. core.autocrlf=true di Windows memberi CRLF, dan
+# bash/systemd/udev salah membaca baris yang berakhiran \r.
+*.sh text eol=lf
+deploy/** text eol=lf

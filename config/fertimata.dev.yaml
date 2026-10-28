@@ -1,0 +1,260 @@
+# Konfigurasi edge agent FertiMata — PENGEMBANGAN DI LAPTOP (agent.hal: fake).
+# Turunan dari fertimata.example.yaml. Peta I/O sengaja sama dengan contoh supaya perilaku logika
+# yang dites di laptop sama dengan di Jetson. Hanya bagian agent dan fake yang berbeda.
+#
+# Jalankan: python -m fertimata_edge --config config/fertimata.dev.yaml
+# Selalu kutip "ON"/"OFF" — YAML 1.1 membaca ON tanpa kutip sebagai boolean.
+
+agent:
+  site: laptop-dev
+  log_level: INFO
+  hal: fake                 # simulator, tanpa hardware
+  utc_offset_h: 7           # WIB: jadwal patroli dan nama berkas foto (payload tetap UTC)
+
+mqtt:
+  host: 127.0.0.1
+  port: 1883
+  client_id: fertimata-edge
+  username: null
+  password: null
+  qos: 1
+  clean_start: false
+  heartbeat_s: 30           # keputusan D4
+  keepalive_s: 60
+  session_expiry_s: 3600    # MQTT v5: tanpa ini sesi persisten hilang saat putus (clean_start=false tak berguna)
+  reconnect_min_s: 1
+  reconnect_max_s: 30
+  outbox_max: 1000          # pesan tertunda saat broker putus; telemetri/status tertua dibuang dulu
+  dedup_size: 200           # commandUid terakhir yang diingat (Kontrak §5 aturan 6)
+  alert_repeat_s: 600       # jeda kirim ulang alert bertipe sama per device (Kontrak §4.4)
+  topics:                   # harus sama dengan MQTT_TOPIC_* backend
+    telemetry: fertimata/{deviceId}/telemetry
+    status: fertimata/{deviceId}/status
+    command: fertimata/{deviceId}/command
+    command_ack: fertimata/{deviceId}/command/ack
+    ai: fertimata/{deviceId}/ai
+    alert: fertimata/{deviceId}/alert
+
+bus:
+  port: /dev/rs485
+  baudrate: 9600
+  parity: N
+  stopbits: 1
+  timeout_s: 0.3
+  retries: 2
+  gap_ms: 10
+  fail_threshold: 3         # gagal berturut-turut sebelum perangkat dianggap tidak menjawab
+
+# Peta register (`registers`): {fc: 3|4, address, type: u16|s16|u32|s32, word_order: lo_hi|hi_lo, scale}.
+# PERHATIAN: peta untuk soil/light/water_t di bawah hanya untuk SIMULATOR, bukan hasil verifikasi.
+# Jangan disalin ke config Jetson; pakai hasil cek P-H5..P-H7.
+devices:
+  soil:
+    address: 1
+    profile: soil_7in1
+    timeout_s: 1.0
+    label: sensor tanah
+    metric_prefix: soil_a
+    registers:
+      moisture:    {fc: 3, address: 0x0000, scale: 0.1}
+      temperature: {fc: 3, address: 0x0001, type: s16, scale: 0.1}
+      ec:          {fc: 3, address: 0x0002}
+      ph:          {fc: 3, address: 0x0003, scale: 0.1}
+      nitrogen:    {fc: 3, address: 0x0004}
+      phosphorus:  {fc: 3, address: 0x0005}
+      potassium:   {fc: 3, address: 0x0006}
+  air:      {address: 3,  profile: xy_md02, label: sensor suhu udara, metric_prefix: air}
+  light:
+    address: 4
+    profile: lux_rs485
+    label: sensor cahaya
+    metric_prefix: light
+    registers:
+      illuminance: {fc: 3, address: 0x0002, type: u32, word_order: hi_lo}
+  water_t:
+    address: 6
+    profile: ds18b20_mb
+    label: sensor suhu larutan
+    metric_prefix: tank
+    registers:
+      water_temperature: {fc: 3, address: 0x0000, type: s16, scale: 0.1}
+  adc:
+    address: 10
+    profile: adc_7ch
+    label: papan pembaca EC/pH
+    metric_prefix: tank
+    registers:              # satuan mV (scale), hanya untuk simulator
+      a1: {fc: 3, address: 0x0000}
+      a2: {fc: 3, address: 0x0001}
+  # Relay (P-H4 belum terverifikasi): diisi pola profil A dari Arsitektur §4.5 (coil FC5, baca FC1,
+  # IN1 di discrete input FC2 alamat 0). Ganti sesuai hasil cek modbus_probe. Profil B misalnya:
+  #   relay: {write_fc: 6, write_base: 1, on_value: 0x0100, off_value: 0x0200, read_fc: 3, read_base: 1}
+  relay_p:
+    {address: 20, profile: relay_mb, channels: 4, label: relay panel,
+     relay: {write_fc: 5, write_base: 0, read_fc: 1, read_base: 0}}
+  relay_t:
+    {address: 21, profile: relay_mb, channels: 8, label: relay kotak tangki,
+     relay: {write_fc: 5, write_base: 0, read_fc: 1, read_base: 0, input_fc: 2, input_base: 0}}
+  pzem:     {address: 30, profile: pzem016, label: meteran listrik, metric_prefix: mains}
+
+# Peta perangkat fisik → device logis backend (kode katalog).
+logical_devices:
+  JETSON-01:     {sources: [gpio, soc]}
+  PZEM-01:       {sources: [pzem]}
+  PANEL-01:      {sources: [relay_p]}
+  GREENHOUSE-01: {sources: [soil, air, light]}
+  RIO-TANK-01:   {sources: [relay_t, adc, water_t]}
+
+polling:                    # §4.6
+  pzem_s: 3
+  relays_s: 5
+  air_light_s: 60
+  soil_s: 300
+  tank_s: 600
+  soc_s: 60                 # suhu SoC Jetson
+  trolley_s: 30             # trolley.station/home_limit/end_limit (juga dikirim saat berubah)
+
+outputs:                    # actuator_code = kode aktuator di katalog backend
+  pump_dist:   {actuator_code: DIST-PUMP,   device: relay_p, ch: 0, max_on_s: 900, requires_duration: true, label: pompa siram}
+  pan_west:    {actuator_code: CAMERA-PAN,  device: relay_p, ch: 1, label: arah kamera}  # OFF = timur, ON = barat
+  trolley_run: {actuator_code: TROLLEY-RUN, device: relay_p, ch: 2, max_on_s: 60, requires_duration: true, label: trolley}
+  trolley_dir: {actuator_code: TROLLEY-DIR, device: relay_p, ch: 3, label: arah trolley}  # OFF = selatan/HOME, ON = utara/END
+  dose_n:      {actuator_code: DOSING-N,    device: relay_t, ch: 0, max_on_s: 120, requires_duration: true, label: pompa pupuk N}
+  dose_p:      {actuator_code: DOSING-P,    device: relay_t, ch: 1, max_on_s: 120, requires_duration: true, label: pompa pupuk P}
+  dose_k:      {actuator_code: DOSING-K,    device: relay_t, ch: 2, max_on_s: 120, requires_duration: true, label: pompa pupuk K}
+  stirrer:     {actuator_code: STIRRER,     device: relay_t, ch: 4, max_on_s: 600, requires_duration: true, label: pompa aduk}
+  ec_power:    {actuator_code: EC-POWER,    device: relay_t, ch: 5, label: sensor EC}
+
+# Aktuator virtual backend (Kontrak §5.1, BE-1): perintah tingkat tinggi, tanpa relay sendiri.
+# Kode harus sama dengan katalog backend.
+virtual_actuators:
+  trolley_goto:   {actuator_code: TROLLEY-GOTO,   device: JETSON-01, label: posisi trolley}
+  trolley_patrol: {actuator_code: TROLLEY-PATROL, device: JETSON-01, label: patroli kamera}
+  dosing_loop:    {actuator_code: DOSING-LOOP,    device: RIO-TANK-01, label: pemberian pupuk otomatis}
+
+inputs:
+  float_low_ok: {device: relay_t, input: 1, metric: tank.float_low_ok}   # tertutup = air cukup
+  reed:  {gpio_chip: null, gpio_line: null, active: low,  debounce_ms: 5}    # P-H9
+  home:  {gpio_chip: null, gpio_line: null, active: high, debounce_ms: 20}
+  end:   {gpio_chip: null, gpio_line: null, active: high, debounce_ms: 20}
+
+safety:
+  output_groups:                        # nama kelompok yang boleh dipakai di daftar bawah
+    dosing: [dose_n, dose_p, dose_k, stirrer]
+  # Tiap item dalam satu baris adalah satu "sisi": output dari sisi berbeda tidak boleh ON bersamaan.
+  # Anggota kelompok di sisi yang sama boleh (dosing + aduk memang jalan bareng).
+  exclusive_groups:
+    - [dose_n, dose_p, dose_k]          # satu peristaltik dalam satu waktu (§5.3.4)
+    - [dosing, trolley_run]
+    - [dosing, pump_dist]
+  blocked_on_backup_power: [dose_n, dose_p, dose_k, stirrer, trolley_run, pump_dist]
+  blocked_on_float_low: [pump_dist, dose_n, dose_p, dose_k, stirrer]
+  # Output kiri tidak boleh berubah (ON maupun OFF) selama output kanan ON: S12 (DIR saat RUN),
+  # S14/Q5 (pan saat trolley jalan). Jeda dir_settle_ms/stop_settle_ms berlaku untuk pasangan ini.
+  blocked_while_on:
+    trolley_dir: [trolley_run]
+    pan_west: [trolley_run]
+  travel:                               # S13/S16: limit di arah gerak RUN
+    run: trolley_run
+    direction: trolley_dir
+    limit_when_on: end                  # DIR ON = utara/END (§5.1)
+    limit_when_off: home
+  float_max_age_s: 300
+  dir_settle_ms: 100
+  stop_settle_ms: 300
+
+analog:                     # §6.3, kanal ADC = devices.adc.registers a1..a7 (mV)
+  power_output: ec_power    # R5: OFF saat baca pH, ON saat baca EC
+  temperature_device: water_t
+  # Kalibrasi di bawah HANYA cocok untuk simulator (fake.*), bukan hasil P-H13.
+  ec:
+    {device: adc, ch: 1, k: 1.0, mv_per_ms_cm: 164.0, range_switch_ms_cm: [2.0, 2.5],
+     cal_k_range: [0.75, 1.5],   # jendela kalibrasi pustaka DFRobot_EC
+     cal: {v_1413: 231.7, v_12880: 2112.3}}
+  ph: {device: adc, ch: 2, cal_temperature_c: 25, cal: {v_401: 3038.2, v_686: 2525.2, v_918: 2107.6}}
+  settle_s: 5
+  samples: 7
+  temp_coef: 0.02           # EC25 = EC / (1 + 0,02 × (T − 25))
+  valid:                    # S9: di luar rentang fisik → bacaan dibuang + EC_PH_INVALID
+    ec_ms_cm: [0, 20]       # rentang ukur DFR0300
+    ph: [0, 14]
+    water_temperature_c: [0, 50]
+
+trolley:
+  stations: 10
+  station_pitch_mm: 600
+  first_station_mm: 300
+  speed_m_s: 0.15
+  settle_s: 2.0
+  pan_settle_s: 2.0
+  segment_timeout_s: 10
+  travel_timeout_s: 60
+
+camera:
+  device: /dev/cam-trolley
+  width: null               # P-H10
+  height: null
+  exposure: null            # nilai manual, dikunci
+  white_balance: null
+  format: png               # keputusan D1
+  root: data/citra          # data/citra/YYYY-MM-DD/YYYYMMDD-HHMM_Snn_timur.png + .json (D1)
+  pan_output: pan_west      # Kontrak §5: ON = barat, OFF = timur
+  alternate_pan: true       # §9.4: stasiun genap barat dulu (hemat satu gerakan pan)
+  blur_threshold: 60        # simulator: foto palsu bernilai fake.image_sharpness
+  patrol_schedule: ["19:00"]   # keputusan D3, waktu WIB, lampu greenhouse menyala
+  patrol_catchup_min: 30    # agent yang hidup ≤ 30 menit setelah jadwal tetap berpatroli
+  disk_warn_free_gb: 2      # laptop: dikecilkan (foto palsu hanya beberapa KB); Jetson: lihat contoh
+  disk_stop_free_gb: 1
+
+power:                      # §7.4, §7.5
+  pzem_device: pzem
+  reference_device: relay_p # PZEM diam + relay ini menjawab = PLN padam; keduanya diam = gangguan bus
+  outage_voltage_v: 180
+  restore_voltage_v: 200    # histeresis
+  pump_output: pump_dist
+  pump_baseline_a: 0.3      # P-H11 belum terverifikasi (Arsitektur §7.5); null = deteksi arus mati
+  pump_nominal_a: 1.55
+  ssr_short_margin_a: 0.3   # Q4: arus > baseline + margin saat R0 OFF = SSR short
+  dry_run_ratio: 0.5        # kenaikan arus < 50 % nominal saat R0 ON = pompa kering/tersumbat
+  current_settle_s: 3       # arus pompa butuh waktu naik/turun setelah R0 berubah
+  anomaly_reads: 2          # bacaan PZEM janggal berturut-turut sebelum alert/tindakan
+  soc_warn_c: 80
+  soc_thermal_glob: /sys/class/thermal/thermal_zone*/temp
+
+dosing:                     # loop dosing §8.2 (F9), dipicu DOSING-LOOP DOSE_TO_TARGET
+  pumps: {n: dose_n, p: dose_p, k: dose_k}   # urutan dosis N → P → K, satu pompa dalam satu waktu
+  stirrer_output: stirrer
+  target_ec_ms_cm: [0.5, 4.0]   # targetEc yang diterima (Kontrak §5.1)
+  # Angka di bawah HANYA untuk simulator (FakeWorld memakai angka yang sama sebagai "kenyataan"),
+  # bukan hasil P-H12.
+  drum_volume_l: 150
+  pump_flow_ml_s: {n: 1.0, p: 1.0, k: 1.0}
+  ec_gain_ms_cm_per_ml_l: {n: 0.25, p: 0.25, k: 0.25}
+  stock_g_l:      {n: null, p: null, k: null}
+  stir_s: 90                    # §8.2 langkah 8: aduk 60–120 s
+  min_pump_s: 0.5               # dosis lebih singkat dari ini dilewati
+  max_iterations: 8             # §8.2 langkah 9: maksimal 5–8 iterasi
+  fraction_per_iteration: 0.4   # §8.2 langkah 6: 30–50 % ΔEC per iterasi
+  ec_tolerance_ms_cm: 0.05      # §8.2 langkah 4: ΔEC ≤ 0,05 → selesai
+  stable_interval_s: 20         # jarak dua bacaan EC saat menunggu stabil
+  stable_delta_ms_cm: 0.02      # dua bacaan berurutan berbeda ≤ ini = stabil
+  stable_max_reads: 6           # tidak stabil setelah sekian bacaan → loop berhenti
+  guard_s: 1                    # prasyarat dicek ulang tiap detik selama menunggu
+  ratio:                        # N:P:K per fase (§8.2 langkah 5), kunci = phase dari backend
+    vegetatif:       [5.4, 1, 6.3]
+    buah_muda:       [4.1, 1, 7.9]
+    pembesaran_buah: [5.4, 1, 4.7]
+
+fake:                       # parameter simulator (bukan angka hardware)
+  tick_s: 0.05
+  seed: 42
+  magnet_width_mm: 20
+  start_position_mm: 1200   # trolley mulai di tengah rel, posisi "tidak diketahui" sampai homing
+  mains_voltage_v: 221.0
+  air_temperature_c: 29.0
+  air_humidity_pct: 70.0
+  float_low_ok: true
+  soc_temperature_c: 48.0
+  image_width: 64
+  image_height: 48
+  image_sharpness: 150

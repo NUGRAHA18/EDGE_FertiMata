@@ -1,0 +1,46 @@
+# Unit systemd edge agent FertiMata (F10.2). Dipasang oleh deploy/install.sh ke
+# /etc/systemd/system/fertimata-edge.service. Jalur di bawah harus sama dengan variabel di install.sh.
+#
+#   sudo systemctl status fertimata-edge
+#   sudo systemctl restart fertimata-edge      # restart = S1: semua relay OFF dulu
+#   journalctl -u fertimata-edge -f
+
+[Unit]
+Description=FertiMata edge agent (RS485, GPIO trolley, kamera, MQTT)
+Documentation=https://github.com/NUGRAHA18/EDGE_FertiMata
+# Jam harus tersinkron untuk expiresAt (S17) dan jadwal patroli, tapi agent TIDAK menunggu jaringan
+# atau broker: S1 (semua relay OFF) harus tetap jalan walau LAN mati; link MQTT menyambung sendiri.
+Wants=time-sync.target
+After=time-sync.target systemd-udevd.service
+# Restart tidak pernah menyerah (S20): proses mati = relay bisa tertinggal ON.
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=fertimata
+Group=fertimata
+SupplementaryGroups=dialout gpio video
+# camera.root relatif (data/citra) jadi /var/lib/fertimata/data/citra.
+WorkingDirectory=/var/lib/fertimata
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/fertimata-edge/venv/bin/python -m fertimata_edge --config /etc/fertimata/fertimata.yaml
+
+Restart=always
+RestartSec=3
+# Boot: S1 + baca PZEM beberapa kali dengan timeout bus; READY dikirim setelah "agent siap".
+TimeoutStartSec=120
+# Ping dikirim tiap WatchdogSec/2 dari event loop; loop macet → SIGABRT → restart → S1.
+WatchdogSec=30
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+# Pengamanan ringan. Tidak memakai PrivateDevices: agent butuh /dev/rs485, gpiochip, kamera.
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/fertimata
+
+[Install]
+WantedBy=multi-user.target

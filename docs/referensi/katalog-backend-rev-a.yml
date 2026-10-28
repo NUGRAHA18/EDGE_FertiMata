@@ -1,0 +1,239 @@
+# FERTIMATA Rev A - katalog hardware dan kebijakan interlock.
+# Sumber: docs/Arsitektur-Sistem.md Revisi A (21 Oktober 2026).
+#
+# Berkas ini adalah SATU-SATUNYA tempat backend kenal revisi hardware ini. Kalo ada revisi beda,
+# atau perbaikan pas part-nya nyampe, tinggal edit di sini (atau bikin salinan yang ditunjuk sama
+# HARDWARE_CATALOG_LOCATION) — gak perlu ubah kode Java sama sekali.
+#
+# Berkas ini BUKAN: peta wiring (pemasangan kabel). Alamat Modbus, channel relay, dan pin GPIO di bawah
+# `metadata` cuma salinan informasi buat operator console. Edge agent di Jetson yang megang
+# peta alamat utamanya (fertimata.yaml, Arsitektur-Sistem.md §11).
+#
+# Kode device ngikutin fault domain, jadi console bisa ngebedain "kabel I/O remote putus" sama
+# "Jetson-nya mati/down": tiap device bakal jalan OFFLINE sendiri-sendiri pas edge agent gak dapet respon lagi.
+#
+# Sync sifatnya create-only: baris yang udah ada gak bakal pernah berubah cuma gara-gara restart. Edit baris itu
+# lewat API (PATCH /api/sensors/{id}, PATCH /api/actuators/{id}) sebagai gantinya. Database yang dibuat dari
+# katalog versi 17 September diselaraskan oleh migrasi V6__fertimata_rev_a_final.sql.
+
+app:
+  catalog:
+    name: FERTIMATA Rev A
+
+    devices:
+      # ---------------------------------------------------------------------------------------------
+      - code: JETSON-01
+        name: Jetson Orin Nano (otak sistem)
+        type: EDGE_GATEWAY
+        description: Komputer yang menjalankan frontend, backend, database, inferensi dan edge agent.
+        metadata:
+          location: Panel box (lokasi akhir belum terverifikasi)
+          os: JetPack 6 / Ubuntu 22.04
+          power: Buck 18 V + fuse 4 A + TVS, mode daya 15 W, panel tanpa fan
+          reports: GPIO trolley (reed, limit) lewat papan GPIO, suhu SoC, sumber daya situs
+        sensors:
+          - code: TROLLEY-STATION
+            metric-key: trolley.station
+            name: Posisi trolley (stasiun)
+            type: POSITION
+            description: Nomor stasiun 1-10 dari hitungan magnet reed (tiap 600 mm); 0 = HOME.
+            metadata:
+              source: GPIO reed MC-38 lewat papan GPIO
+              stations: "10"
+          - code: TROLLEY-HOME
+            metric-key: trolley.home_limit
+            name: Limit HOME trolley (selatan)
+            type: LIMIT_SWITCH
+            description: Kontak NC - aktif berarti tertekan ATAU kabel putus.
+            metadata:
+              source: GPIO lewat papan GPIO, KW12 COM-NC
+          - code: TROLLEY-END
+            metric-key: trolley.end_limit
+            name: Limit END trolley (utara)
+            type: LIMIT_SWITCH
+            description: Kontak NC - aktif berarti tertekan ATAU kabel putus.
+            metadata:
+              source: GPIO lewat papan GPIO, KW12 COM-NC
+          - code: JETSON-SOC-TEMP
+            metric-key: jetson.soc_temperature
+            name: Suhu SoC Jetson
+            type: TEMPERATURE
+            unit: C
+            description: Panel tanpa fan; Jetson hanya aman pada suhu lingkungan 0-35 C.
+
+      # ---------------------------------------------------------------------------------------------
+      - code: PZEM-01
+        name: PZEM-016 (PLN & arus panel)
+        type: POWER_METER
+        description: Di bus RS485 bersama, alamat 30. Diam sementara relay 20 menjawab = PLN padam.
+        metadata:
+          bus: RS485 /dev/rs485 9600 8N1
+          modbusAddress: "30"
+          ct: Jalur L utama panel (arus total panel, bukan pompa saja)
+        sensors:
+          - code: MAINS-VOLTAGE
+            metric-key: mains.voltage
+            name: Tegangan PLN
+            type: VOLTAGE
+            unit: V
+            description: Di bawah 180 V dianggap PLN padam.
+          - code: MAINS-FREQUENCY
+            metric-key: mains.frequency
+            name: Frekuensi PLN
+            type: FREQUENCY
+            unit: Hz
+          - code: MAINS-CURRENT
+            metric-key: mains.current
+            name: Arus total panel
+            type: CURRENT
+            unit: A
+            description: Baseline saat pompa OFF kira-kira 0,3 A. Di atas baseline saat pompa OFF = SSR rusak short.
+          - code: MAINS-POWER
+            metric-key: mains.power
+            name: Daya total panel
+            type: POWER
+            unit: W
+          - code: MAINS-ENERGY
+            metric-key: mains.energy
+            name: Energi total panel
+            type: ENERGY
+            unit: kWh
+          - code: MAINS-POWER-FACTOR
+            metric-key: mains.power_factor
+            name: Faktor daya panel
+            type: POWER_FACTOR
+
+      # ---------------------------------------------------------------------------------------------
+      - code: PANEL-01
+        name: Relay Modbus panel (alamat 20)
+        type: MODBUS_IO
+        description: Relay 4-ch di panel box.
+        metadata:
+          bus: RS485 /dev/rs485 9600 8N1
+          modbusAddress: "20"
+        actuators:
+          - code: DIST-PUMP
+            name: Pompa distribusi 220 V
+            type: DISTRIBUTION_PUMP
+            description: Lewat SSR-40DA. Tanpa timer mekanis - batas durasi dari software (§5.4).
+            max-run-seconds: 900
+            metadata:
+              modbusAddress: "20"
+              channel: R0
+              load: SSR-40DA -> Panasonic GP-129JXK-P2
+          - code: CAMERA-PAN
+            name: Pan kamera (timur/barat)
+            type: CAMERA_PAN
+            description: ON = menghadap barat, OFF = timur. Berhenti sendiri di limit; tunggu 2 s sebelum memotret.
+            metadata:
+              modbusAddress: "20"
+              channel: R1
+              load: MY4N #2 -> motor JGY-370 12 V
+          - code: TROLLEY-RUN
+            name: Motor trolley (jalan)
+            type: TROLLEY_MOTOR
+            description: Rel 6 m pada 0,15 m/s, perjalanan penuh kira-kira 40 detik.
+            max-run-seconds: 60
+            metadata:
+              modbusAddress: "20"
+              channel: R2
+          - code: TROLLEY-DIR
+            name: Motor trolley (arah)
+            type: TROLLEY_DIRECTION
+            description: ON = utara/END, OFF = selatan/HOME. Jangan dibalik saat motor berjalan - diurutkan oleh edge agent.
+            metadata:
+              modbusAddress: "20"
+              channel: R3
+
+      # ---------------------------------------------------------------------------------------------
+      - code: GREENHOUSE-01
+        name: Sensor greenhouse (alamat 1, 3, 4)
+        type: MODBUS_SENSOR_GROUP
+        description: Sensor tanah, udara dan cahaya pada bus RS485 daisy chain.
+        metadata:
+          bus: RS485 /dev/rs485 9600 8N1
+        sensors:
+          # Soil 7-in-1 dari SimonKori (address 1). Satu-satunya sensor tanah; key soil_a.* dipertahankan supaya
+          # riwayat dan plant.plot_code = A tetap nyambung. Register dan baud bawaan belum terverifikasi.
+          - { code: SOIL-A-MOISTURE, metric-key: soil_a.moisture, name: Kelembapan tanah, type: SOIL_MOISTURE, unit: "%", metadata: { modbusAddress: "1" } }
+          - { code: SOIL-A-TEMP, metric-key: soil_a.temperature, name: Suhu tanah, type: SOIL_TEMPERATURE, unit: C, metadata: { modbusAddress: "1" } }
+          - { code: SOIL-A-EC, metric-key: soil_a.ec, name: EC tanah, type: SOIL_EC, unit: uS/cm, metadata: { modbusAddress: "1" } }
+          - { code: SOIL-A-PH, metric-key: soil_a.ph, name: pH tanah, type: SOIL_PH, unit: pH, metadata: { modbusAddress: "1" } }
+          - { code: SOIL-A-N, metric-key: soil_a.nitrogen, name: N tanah, type: SOIL_NITROGEN, unit: mg/kg, metadata: { modbusAddress: "1" } }
+          - { code: SOIL-A-P, metric-key: soil_a.phosphorus, name: P tanah, type: SOIL_PHOSPHORUS, unit: mg/kg, metadata: { modbusAddress: "1" } }
+          - { code: SOIL-A-K, metric-key: soil_a.potassium, name: K tanah, type: SOIL_POTASSIUM, unit: mg/kg, metadata: { modbusAddress: "1" } }
+          # Air (address 3) and light (address 4).
+          - { code: AIR-TEMP, metric-key: air.temperature, name: Suhu udara greenhouse, type: AIR_TEMPERATURE, unit: C, metadata: { modbusAddress: "3", model: SHT40 XY-MD02 } }
+          - { code: AIR-HUMIDITY, metric-key: air.humidity, name: Kelembapan udara greenhouse, type: AIR_HUMIDITY, unit: "%RH", metadata: { modbusAddress: "3", model: SHT40 XY-MD02 } }
+          - code: LIGHT
+            metric-key: light.illuminance
+            name: Intensitas cahaya
+            type: ILLUMINANCE
+            unit: lux
+            description: Sensor cahaya RS485 0-200.000 lux.
+            metadata:
+              modbusAddress: "4"
+
+      # ---------------------------------------------------------------------------------------------
+      - code: RIO-TANK-01
+        name: Kotak tangki fertigasi
+        type: MODBUS_IO
+        description: Kotak IP56 di bibir drum - relay 8-ch alamat 21, ADC 7-ch alamat 10, DS18B20 alamat 6.
+        metadata:
+          bus: RS485 /dev/rs485 9600 8N1
+          modbusAddress: "6, 10, 21"
+        sensors:
+          - { code: TANK-EC, metric-key: tank.ec, name: EC larutan, type: SOLUTION_EC, unit: mS/cm, description: "DFR0300 di rakit probe, dikompensasi ke 25 C.", metadata: { modbusAddress: "10", channel: A1 } }
+          - { code: TANK-PH, metric-key: tank.ph, name: pH larutan, type: SOLUTION_PH, unit: pH, description: "PH-4502C di rakit probe, dibaca saat papan EC mati.", metadata: { modbusAddress: "10", channel: A2 } }
+          - { code: TANK-WATER-TEMP, metric-key: tank.water_temperature, name: Suhu larutan, type: SOLUTION_TEMPERATURE, unit: C, description: "DS18B20 untuk kompensasi suhu EC dan pH.", metadata: { modbusAddress: "6" } }
+          - code: FLOAT-LOW
+            metric-key: tank.float_low_ok
+            name: Float LOW drum
+            type: LEVEL_SWITCH
+            description: 1 = tertutup, air cukup. 0 = air rendah ATAU kabel putus - pompa distribusi, dosing dan aduk diblokir.
+            metadata:
+              modbusAddress: "21"
+              channel: IN1
+        actuators:
+          - { code: DOSING-N, name: Pompa dosing N (Calnit), type: DOSING_PUMP, max-run-seconds: 120, description: "Debit dikalibrasi pada tegangan PLN normal.", metadata: { modbusAddress: "21", channel: R0 } }
+          - { code: DOSING-P, name: Pompa dosing P (MKP), type: DOSING_PUMP, max-run-seconds: 120, description: "Debit dikalibrasi pada tegangan PLN normal.", metadata: { modbusAddress: "21", channel: R1 } }
+          - { code: DOSING-K, name: Pompa dosing K (SOP), type: DOSING_PUMP, max-run-seconds: 120, description: "Debit dikalibrasi pada tegangan PLN normal.", metadata: { modbusAddress: "21", channel: R2 } }
+          - { code: STIRRER, name: Pompa aduk drum, type: STIRRER, max-run-seconds: 600, description: "BLDC 24 V 22 W, menyala selama dosing + waktu aduk.", metadata: { modbusAddress: "21", channel: R4 } }
+          - { code: EC-POWER, name: Daya papan EC, type: SENSOR_POWER, description: "Harus OFF saat membaca pH. Diurutkan oleh edge agent.", metadata: { modbusAddress: "21", channel: R5 } }
+
+  power:
+    # Values the edge agent reports in the status message's powerSource field. Anything else counts as
+    # backup power - including UNKNOWN. Edge agent: PZEM 30 diam sementara relay 20 menjawab = BATTERY;
+    # keduanya diam = gangguan bus (UNKNOWN), bukan padam.
+    normal-sources: [MAINS]
+
+  actuator:
+    safety:
+      # Quoted on purpose: unquoted ON is the boolean true in YAML 1.1 and would bind as "TRUE".
+      activating-commands: ["ON"]
+      duration-parameter: durationSeconds
+      # §5.4: tidak ada timer mekanis lagi, jadi tiap output yang bisa jalan terus wajib punya durasi.
+      # Batas per actuator ada di max-run-seconds di atas (atau PATCH /api/actuators/{id}).
+      timed-types: [DISTRIBUTION_PUMP, TROLLEY_MOTOR, DOSING_PUMP, STIRRER]
+      # §7.4 PLN padam: hentikan dosing, aduk dan trolley, matikan pompa distribusi.
+      blocked-on-backup-power-types: [DOSING_PUMP, STIRRER, TROLLEY_MOTOR, DISTRIBUTION_PUMP]
+      # §5.3: dosing (pompa N/P/K + aduk) tidak bersamaan dengan trolley (anggaran arus UPS 4 A) maupun
+      # pompa distribusi. Dosing dan aduk sengaja tidak satu grup - keduanya memang jalan bersamaan.
+      exclusive-type-groups:
+        - [DOSING_PUMP, TROLLEY_MOTOR]
+        - [STIRRER, TROLLEY_MOTOR]
+        - [DOSING_PUMP, DISTRIBUTION_PUMP]
+        - [STIRRER, DISTRIBUTION_PUMP]
+      # §5.3.2: pan hanya saat trolley diam. Satu arah: kamera boleh tetap menghadap barat selama trolley jalan.
+      blocked-while-active:
+        - types: [CAMERA_PAN]
+          while-active: [TROLLEY_MOTOR]
+      # §6.2 + §12.4: float LOW terbuka = air rendah atau kabel putus. Bacaan yang hilang atau basi juga diblokir.
+      signal-interlocks:
+        - name: FLOAT_LOW
+          device: RIO-TANK-01
+          metric-key: tank.float_low_ok
+          ok-values: ["1", "CLOSED", "TRUE"]
+          max-age: 10m
+          blocked-types: [DISTRIBUTION_PUMP, DOSING_PUMP, STIRRER]
+      active-states: ["ON"]

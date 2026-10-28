@@ -1,0 +1,18 @@
+# Udev FertiMata (F10.1, Arsitektur §2). Dipasang oleh deploy/install.sh ke
+# /etc/udev/rules.d/99-fertimata.rules. Software selalu membuka /dev/rs485 dan /dev/cam-trolley,
+# tidak pernah ttyUSB0/video0 yang nomornya bisa berubah setiap boot.
+#
+# Cek setelah dipasang:  ls -l /dev/rs485 /dev/cam-trolley /dev/gpiochip*
+# Kalau /dev/ttyUSB* muncul lalu hilang: sudo apt remove brltty
+
+# Adaptor RS485 Waveshare P03005 (FT232RL 0403:6001), satu-satunya port Modbus (PZEM ikut di bus).
+# ID_MM_DEVICE_IGNORE: ModemManager tidak boleh "mencoba" port ini (mengirim perintah AT ke bus).
+# Kalau kelak ada FT232 kedua di Jetson, tambahkan ATTRS{serial}=="<dari udevadm info>".
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", SYMLINK+="rs485", GROUP="dialout", MODE="0660", ENV{ID_MM_DEVICE_IGNORE}="1"
+
+# Kamera trolley Arducam B0278 (UVC). VID:PID BELUM TERVERIFIKASI (P-H10): isi dari `lsusb`, lalu
+# hapus tanda # di baris berikut. ATTR{index}=="0" = node capture, bukan node metadata UVC.
+#SUBSYSTEM=="video4linux", ATTRS{idVendor}=="XXXX", ATTRS{idProduct}=="YYYY", ATTR{index}=="0", SYMLINK+="cam-trolley", GROUP="video", MODE="0660"
+
+# GPIO trolley (reed, HOME, END) lewat libgpiod: agent berjalan sebagai user non-root di grup gpio.
+SUBSYSTEM=="gpio", KERNEL=="gpiochip*", GROUP="gpio", MODE="0660"
