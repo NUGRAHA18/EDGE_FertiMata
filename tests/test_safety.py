@@ -50,7 +50,7 @@ async def test_duration_capped_by_edge_limit(rig):
     # Batas yang lebih ketat dari keduanya berlaku (04-aturan-keselamatan, catatan).
     await rig.command("DOSING-P", "ON", 9999)
     assert rig.outputs.states["dose_p"].deadline == pytest.approx(
-        rig.clock.monotonic() + 120, abs=0.1
+        rig.clock.monotonic() + rig.config.outputs["dose_p"].max_on_s, abs=0.1
     )
 
 

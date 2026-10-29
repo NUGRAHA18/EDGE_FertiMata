@@ -178,11 +178,16 @@ async def test_s2_duration_turns_off_without_alert(rig):
 
 async def test_s2_max_on_cuts_longer_request_and_alerts(rig):
     await rig.run(rig.outputs.set("dose_n", True, duration_s=500))
-    await rig.run(rig.clock.advance(120.05))
+    limit = rig.config.outputs["dose_n"].max_on_s
+    await rig.run(rig.clock.advance(limit - 0.1))
+    assert rig.physical("dose_n")
+    await rig.run(rig.clock.advance(0.15))
     assert not rig.physical("dose_n")
     [alert] = rig.sink.of_type("OUTPUT_TIMEOUT")
     assert alert["severity"] == "WARNING" and alert["actuator_code"] == "DOSING-N"
-    assert alert["metadata"]["maxOnSeconds"] == 120 and alert["metadata"]["requestedSeconds"] == 500
+    assert (
+        alert["metadata"]["maxOnSeconds"] == limit and alert["metadata"]["requestedSeconds"] == 500
+    )
 
 
 async def test_s2_watchdog_stop_uses_stop_priority(rig, monkeypatch):

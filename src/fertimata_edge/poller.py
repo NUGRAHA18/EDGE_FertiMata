@@ -5,6 +5,9 @@ Metrik yang gagal dibaca dihilangkan, tidak diisi angka palsu (Kontrak §4.1). A
 link menahan pengulangannya sesuai `mqtt.alert_repeat_s` (F3.8).
 
 Relay (`relays_s`) dibaca `outputs`; EC/pH lewat ADC punya urutan baca sendiri (F6).
+
+Kelompok di `PUBLISH_OF_GROUP` dikirim lebih jarang daripada dibaca (bacaan terakhir saat jatuh
+tempo). Listener bacaan (daya, patroli) tetap menerima setiap bacaan.
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import math
 from collections.abc import Callable
 from typing import Any, Protocol
 
@@ -31,6 +35,10 @@ GROUP_OF_PROFILE = {
     "soil_7in1": "soil_s",
     "ds18b20_mb": "tank_s",
 }
+
+# Kelompok polling → kunci interval kirim di `polling`. PZEM: ±75 % volume data backend bila
+# dikirim tiap 3 s; perubahan sumber daya tetap segera lewat status `powerSource` (Kontrak §3).
+PUBLISH_OF_GROUP = {"pzem_s": "pzem_publish_s"}
 
 
 class TelemetrySink(Protocol):
@@ -84,9 +92,17 @@ class Poller:
             (n for n, d in config.logical_devices.items() if "soc" in d.sources), None
         )
         self.groups: dict[str, list[str]] = {}
+        # Perangkat → (interval kirim, interval baca) untuk kelompok yang dikirim lebih jarang.
+        self._publish_every: dict[str, tuple[float, float]] = {}
+        self._published_at: dict[str, float] = {}
         for name, profile in self.profiles.items():
             group = GROUP_OF_PROFILE[profile.device.profile]
             self.groups.setdefault(group, []).append(name)
+            if group in PUBLISH_OF_GROUP:
+                self._publish_every[name] = (
+                    getattr(config.polling, PUBLISH_OF_GROUP[group]),
+                    getattr(config.polling, group),
+                )
         self._tasks: list[asyncio.Task[None]] = []
         # Dipanggil setelah setiap perangkat dibaca: (nama perangkat, metrik yang terbaca).
         self.read_listeners: list[Callable[[str, dict[str, float]], None]] = []
@@ -128,7 +144,7 @@ class Poller:
             if result.errors:
                 log.debug("baca gagal", extra=fields(device=name, errors="; ".join(result.errors)))
                 self._alert_if_silent(name)
-            if result.values:
+            if result.values and self._publish_due(name):
                 per_logical.setdefault(self.logical_of[name], {}).update(result.values)
             for listener in self.read_listeners:
                 listener(name, result.values)
@@ -137,6 +153,18 @@ class Poller:
             for logical, data in per_logical.items():
                 self.sink.publish_telemetry(logical, data)
         return per_logical
+
+    def _publish_due(self, name: str) -> bool:
+        every = self._publish_every.get(name)
+        if every is None:
+            return True
+        publish_s, read_s = every
+        now = self.clock.monotonic()
+        # Toleransi setengah interval baca: kiriman tidak bergeser satu siklus baca tiap kali.
+        if now < self._published_at.get(name, -math.inf) + publish_s - read_s / 2:
+            return False
+        self._published_at[name] = now
+        return True
 
     def _alert_if_silent(self, name: str) -> None:
         if self.sink is not None:

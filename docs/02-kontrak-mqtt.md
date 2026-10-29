@@ -58,21 +58,27 @@ terlihat beda dengan Jetson mati.
 | `JETSON-01` | GPIO, SoC | `trolley.station`, `trolley.home_limit`, `trolley.end_limit`, `jetson.soc_temperature` | Virtual: `TROLLEY-PATROL`, `TROLLEY-GOTO` (§5.1) |
 | `PZEM-01` | Modbus 30 | `mains.voltage`, `mains.frequency`, `mains.current`, `mains.power`, `mains.energy` (kWh), `mains.power_factor` | — |
 | `PANEL-01` | Modbus 20 (relay 4-ch) | — | `DIST-PUMP` R0, `CAMERA-PAN` R1, `TROLLEY-RUN` R2, `TROLLEY-DIR` R3 |
-| `GREENHOUSE-01` | Modbus 1, 3, 4 | `soil_a.moisture`, `soil_a.temperature`, `soil_a.ec` (µS/cm), `soil_a.ph`, `soil_a.nitrogen`, `soil_a.phosphorus`, `soil_a.potassium` (mg/kg), `air.temperature`, `air.humidity`, `light.illuminance` | — |
+| `GREENHOUSE-01` | Modbus 1, 3, 4 | `soil_a.moisture`, `soil_a.temperature`, `soil_a.ec` (**mS/cm**; register sensor µS/cm × `scale: 0.001` di config, sejak 29 Okt mengikuti fuzzy irigasi tim AI 0–4 mS/cm), `soil_a.ph`, `soil_a.nitrogen`, `soil_a.phosphorus`, `soil_a.potassium` (mg/kg), `air.temperature`, `air.humidity`, `light.illuminance` | — |
 | `RIO-TANK-01` | Modbus 6, 10, 21 | `tank.ec` (mS/cm, sudah dikompensasi 25 °C), `tank.ph`, `tank.water_temperature`, `tank.float_low_ok` | `DOSING-N` R0, `DOSING-P` R1, `DOSING-K` R2, `STIRRER` R4, `EC-POWER` R5 |
 
-Interval telemetri yang diharapkan backend (BE-3, `app.metrics.device-intervals`), satu pesan per
-kelompok polling (`polling.*` edge):
+Interval kirim telemetri edge, satu pesan per kelompok polling (`polling.*` edge). Backend tidak lagi
+menyimpan salinan interval ini (modul metrik sistem dan `app.metrics.device-intervals` dihapus 29 Okt),
+jadi tabel ini hanya acuan. Yang tetap bergantung pada interval: interlock `FLOAT_LOW` backend memeriksa
+kesegaran `tank.float_low_ok` (≤ 5 menit), dan device dianggap OFFLINE dari heartbeat status (§4.2). PZEM dibaca tiap `pzem_s` untuk deteksi lokal (PLN padam,
+SSR short, pompa kering), tapi telemetrinya dikirim tiap `pzem_publish_s` (bacaan terakhir; disepakati
+29 Okt untuk menekan volume database). Perubahan MAINS ↔ BATTERY tetap dikirim **segera** lewat
+status `powerSource` (§4.2), tidak menunggu telemetri:
 
 | Device | Kelompok edge | Interval |
 |---|---|---|
 | `JETSON-01` | `trolley_s`, `soc_s` | 30 s, 60 s |
-| `PZEM-01` | `pzem_s` | 3 s |
+| `PZEM-01` | `pzem_publish_s` (dibaca tiap `pzem_s` 3 s) | 30 s |
 | `GREENHOUSE-01` | `air_light_s` (udara + cahaya satu pesan), `soil_s` | 60 s, 300 s |
 | `RIO-TANK-01` | `relays_s` (`tank.float_low_ok`), `tank_s` (pH + EC + suhu air **satu** pesan) | 5 s, 600 s |
 | `PANEL-01` | — (hanya status) | — |
 
-Kalau `polling.*` di config diubah, katalog backend ikut diubah.
+Kalau `polling.relays_s` diubah, pastikan `tank.float_low_ok` tetap terkirim jauh di bawah batas
+kesegaran 5 menit backend. Interval lain bebas diubah tanpa mengubah backend.
 
 Satuan mengikuti katalog: suhu °C, kelembapan %, energi **kWh** (PZEM memberi Wh → bagi 1000).
 
@@ -200,7 +206,7 @@ backend menyajikan folder itu read-only di `/captures/**` (BE-2, env `CAPTURES_D
 | `CAMERA-PAN` | `ON` / `OFF` | ON = barat, OFF = timur. Ditolak saat trolley bergerak | — |
 | `TROLLEY-RUN` | `ON` / `OFF` | Jalan ke arah DIR saat ini, **tetap** berhenti di limit/timeout | wajib, ≤ 60 |
 | `TROLLEY-DIR` | `ON` / `OFF` | ON = utara/END. Hanya boleh saat RUN OFF | — |
-| `DOSING-N/P/K` | `ON` / `OFF` | Peristaltik; satu pompa dalam satu waktu | wajib, ≤ 120 |
+| `DOSING-N/P/K` | `ON` / `OFF` | Peristaltik; satu pompa dalam satu waktu | wajib, ≤ 150 (fuzzy pupuk tim AI 0–150 s; 29 Okt, semula 120) |
 | `STIRRER` | `ON` / `OFF` | Pompa aduk | wajib, ≤ 600 |
 | `EC-POWER` | `ON` / `OFF` | Daya papan EC. **Dikelola edge** saat siklus baca analog; perintah manual ditolak saat siklus berjalan | — |
 

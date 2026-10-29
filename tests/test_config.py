@@ -122,6 +122,7 @@ RELAY_A = {"write_fc": 5, "write_base": 0, "read_fc": 1, "read_base": 0}
         (lambda d: d["analog"]["ec"].update(range_switch_ms_cm=[2.5, 2.0]), "range_switch_ms_cm"),
         (lambda d: d["analog"]["valid"].update(ph=[14, 0]), "batas bawah"),
         (lambda d: d["analog"]["ec"]["cal"].update(v_1413=0), "analog.ec.cal.v_1413"),
+        (lambda d: d["polling"].update(pzem_publish_s=1), "pzem_publish_s"),
     ],
 )
 def test_broken_config_names_the_key(dev_data, mutate, expected):
@@ -180,3 +181,11 @@ def test_example_has_no_unverified_analog_values():
     example = load_config(EXAMPLE_CONFIG)
     assert example.devices["adc"].registers == {}
     assert example.analog.ec.cal.v_1413 is None and example.analog.ph.cal.points() == []
+
+
+def test_dosing_limit_covers_ai_fuzzy_range():
+    # Keputusan user 29 Okt: fuzzy pupuk tim AI memberi durasi 0–150 s, katalog backend 150 s.
+    # Batas edge lebih kecil memotong dosis yang sah; lebih besar melonggarkan pengaman S2.
+    for path in (EXAMPLE_CONFIG, DEV_CONFIG):
+        outputs = load_config(path).outputs
+        assert [outputs[n].max_on_s for n in ("dose_n", "dose_p", "dose_k")] == [150] * 3

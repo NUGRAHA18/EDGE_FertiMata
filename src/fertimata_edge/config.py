@@ -204,6 +204,15 @@ class PollingConfig(_Model):
     tank_s: float = Field(gt=0)
     soc_s: float = Field(gt=0)
     trolley_s: float = Field(gt=0)  # telemetri trolley.* berkala (juga saat berubah)
+    # Telemetri PZEM-01 dikirim lebih jarang daripada dibaca: deteksi lokal (S7, S10, S11) tetap
+    # memakai setiap bacaan `pzem_s`, backend cukup menyimpan satu bacaan per interval ini.
+    pzem_publish_s: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _publish_not_faster_than_read(self) -> PollingConfig:
+        if self.pzem_publish_s < self.pzem_s:
+            raise ValueError("pzem_publish_s tidak boleh lebih kecil dari pzem_s")
+        return self
 
 
 class OutputConfig(_Model):

@@ -21,7 +21,7 @@ lamanya), edge menghapus loop F9 (masih ada di commit edge `9f0990e`).
 |---|---|---|---|
 | BE-1 | Aktuator virtual + perintah tingkat tinggi (trolley, patroli; dosing dibatalkan 28 Okt) | Tinggi (D2, D3) | F7.5, F8.4 |
 | BE-2 | Sajikan berkas citra (`imageUrl`) | Sedang (D7) | F8, F12 |
-| BE-3 | Sesuaikan timeout offline dan interval telemetri | Rendah (D4) | — |
+| BE-3 | Sesuaikan timeout offline dan interval telemetri (bagian interval tidak berlaku sejak 29 Okt) | Rendah (D4) | — |
 | BE-4 | ~~Metrik `dosing.*` di katalog~~ dibatalkan 28 Okt (dihapus lagi, V9) | — | — |
 | BE-5 | `docker-compose.yml` meneruskan `DEV_SIMULATOR_ENABLED` | Rendah | uji end-to-end |
 | BE-6 | Penamaan `smartmelon` → `fertimata` di database dev | Rendah (D8) | — |
@@ -72,6 +72,11 @@ Edge menyimpan foto di `data/citra/YYYY-MM-DD/` di Jetson dan mengirim `imageUrl
 itu (read-only, mount volume bila backend di container), dengan otorisasi sama seperti API lain.
 
 ## BE-3 — Timeout offline dan interval telemetri (D4)
+
+> **29 Okt: bagian interval tidak berlaku.** Modul metrik sistem (`/api/metrics/system`) dan salinan
+> interval polling di katalog backend (`app.metrics.device-intervals`) dihapus atas keputusan user.
+> Backend tidak perlu disinkronkan lagi dengan `polling` edge. `DEVICE_OFFLINE_TIMEOUT_SECONDS=120`
+> tetap berlaku.
 
 Heartbeat edge 30 s per device. `DEVICE_OFFLINE_TIMEOUT_SECONDS=120` sudah cocok (toleran 3 heartbeat
 hilang). `METRICS_EXPECTED_TELEMETRY_INTERVAL` (default 30s) sebaiknya per device mengikuti kelompok

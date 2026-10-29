@@ -59,7 +59,7 @@ devices:
     registers:
       moisture:    {fc: 3, address: 0x0000, scale: 0.1}
       temperature: {fc: 3, address: 0x0001, type: s16, scale: 0.1}
-      ec:          {fc: 3, address: 0x0002}
+      ec:          {fc: 3, address: 0x0002, scale: 0.001}   # register µS/cm → kirim mS/cm (kontrak §3)
       ph:          {fc: 3, address: 0x0003, scale: 0.1}
       nitrogen:    {fc: 3, address: 0x0004}
       phosphorus:  {fc: 3, address: 0x0005}
@@ -114,15 +114,18 @@ polling:                    # §4.6
   tank_s: 600
   soc_s: 60                 # suhu SoC Jetson
   trolley_s: 30             # trolley.station/home_limit/end_limit (juga dikirim saat berubah)
+  pzem_publish_s: 30        # telemetri PZEM-01 ke backend; deteksi PLN/arus tetap tiap pzem_s
 
 outputs:                    # actuator_code = kode aktuator di katalog backend
   pump_dist:   {actuator_code: DIST-PUMP,   device: relay_p, ch: 0, max_on_s: 900, requires_duration: true, label: pompa siram}
   pan_west:    {actuator_code: CAMERA-PAN,  device: relay_p, ch: 1, label: arah kamera}  # OFF = timur, ON = barat
   trolley_run: {actuator_code: TROLLEY-RUN, device: relay_p, ch: 2, max_on_s: 60, requires_duration: true, label: trolley}
   trolley_dir: {actuator_code: TROLLEY-DIR, device: relay_p, ch: 3, label: arah trolley}  # OFF = selatan/HOME, ON = utara/END
-  dose_n:      {actuator_code: DOSING-N,    device: relay_t, ch: 0, max_on_s: 120, requires_duration: true, label: pompa pupuk N}
-  dose_p:      {actuator_code: DOSING-P,    device: relay_t, ch: 1, max_on_s: 120, requires_duration: true, label: pompa pupuk P}
-  dose_k:      {actuator_code: DOSING-K,    device: relay_t, ch: 2, max_on_s: 120, requires_duration: true, label: pompa pupuk K}
+  # Pompa pupuk 150 s (keputusan user 29 Okt): rentang durasi fuzzy pupuk tim AI 0–150 s dan
+  # katalog backend (V12). Arsitektur §5.4 semula 120 s.
+  dose_n:      {actuator_code: DOSING-N,    device: relay_t, ch: 0, max_on_s: 150, requires_duration: true, label: pompa pupuk N}
+  dose_p:      {actuator_code: DOSING-P,    device: relay_t, ch: 1, max_on_s: 150, requires_duration: true, label: pompa pupuk P}
+  dose_k:      {actuator_code: DOSING-K,    device: relay_t, ch: 2, max_on_s: 150, requires_duration: true, label: pompa pupuk K}
   stirrer:     {actuator_code: STIRRER,     device: relay_t, ch: 4, max_on_s: 600, requires_duration: true, label: pompa aduk}
   ec_power:    {actuator_code: EC-POWER,    device: relay_t, ch: 5, label: sensor EC}
 

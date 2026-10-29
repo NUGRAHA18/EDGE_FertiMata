@@ -112,3 +112,53 @@ async def _until(predicate):
 
     while not predicate():  # noqa: ASYNC110 - jam palsu dimajukan oleh drive()
         await asyncio.sleep(0)
+
+
+# --- PZEM: baca tiap pzem_s, kirim tiap pzem_publish_s (permintaan backend 29 Okt) ----------------
+
+
+async def test_pzem_read_every_pzem_s_but_published_every_publish_s(setup, clock, config):
+    poller, sink, _ = setup
+    reads: list[float] = []
+    poller.read_listeners.append(
+        lambda name, values: reads.append(clock.monotonic()) if name == "pzem" and values else None
+    )
+    poller.start()
+    span = 2 * config.polling.pzem_publish_s
+    await drive(clock, _until(lambda: clock.monotonic() >= span + 0.5), step=0.5, limit=1000)
+
+    # Deteksi lokal (daya, arus) tetap mendapat setiap bacaan.
+    assert len(reads) >= span / config.polling.pzem_s
+    # Backend hanya menerima satu pesan per interval kirim: t=0, 30, 60.
+    sent = _of(sink, "PZEM-01")
+    assert len(sent) == 3
+    assert set(sent[-1]) >= {"mains.voltage", "mains.energy"}
+
+
+async def test_pzem_publish_waits_for_next_good_read_after_failure(setup, clock, hal, config):
+    poller, sink, _ = setup
+    await drive(clock, poller.poll(["pzem"]))
+    assert len(_of(sink, "PZEM-01")) == 1
+    await clock.advance(config.polling.pzem_publish_s)
+    hal.world.set_device_online("pzem", False)
+    await drive(clock, poller.poll(["pzem"]))  # jatuh tempo, tapi bacaan gagal: tidak ada pesan
+    assert len(_of(sink, "PZEM-01")) == 1
+    hal.world.set_device_online("pzem", True)
+    await drive(clock, poller.poll(["pzem"]))  # bacaan berhasil berikutnya langsung dikirim
+    assert len(_of(sink, "PZEM-01")) == 2
+
+
+async def test_other_groups_still_publish_every_read(setup, clock):
+    poller, sink, _ = setup
+    for _ in range(3):
+        await drive(clock, poller.poll(["air", "light"]))
+    assert len(_of(sink, "GREENHOUSE-01")) == 3
+
+
+def test_contract_lists_pzem_publish_interval(config):
+    from .conftest import ROOT
+
+    contract = (ROOT / "docs" / "02-kontrak-mqtt.md").read_text(encoding="utf-8")
+    row = next(line for line in contract.splitlines() if line.startswith("| `PZEM-01` | `pzem_"))
+    assert f"| {config.polling.pzem_publish_s:g} s |" in row
+    assert f"`pzem_s` {config.polling.pzem_s:g} s" in row

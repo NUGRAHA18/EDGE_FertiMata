@@ -105,6 +105,8 @@ async def test_xy_md02_and_config_mapped_sensors(config, hal, clock):
     assert light.values == {"light.illuminance": 18450}
     soil = await drive(clock, RegisterMapProfile("soil", config.devices["soil"]).read(bus))
     assert soil.values["soil_a.ph"] == 6.4 and len(soil.values) == 7
+    # Kontrak §3: EC tanah dalam mS/cm (register µS/cm × 0,001), semesta fuzzy irigasi AI 0–4.
+    assert soil.values["soil_a.ec"] == pytest.approx(1.25)
     await bus.stop()
 
 

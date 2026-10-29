@@ -27,7 +27,7 @@ GPIO_LINES = ("reed", "home", "end")
 SIM_VALUES = {
     "moisture": 34.5,
     "temperature": 27.8,
-    "ec": 1250,
+    "ec": 1.25,  # mS/cm (register 1250 µS/cm dengan scale 0,001)
     "ph": 6.4,
     "nitrogen": 42,
     "phosphorus": 18,
