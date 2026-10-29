@@ -43,6 +43,8 @@ class AgentConfig(_Model):
     # Zona waktu untuk hal yang dibaca manusia: jadwal patroli dan nama berkas foto (WIB = 7).
     # Payload MQTT tetap UTC.
     utc_offset_h: float = Field(ge=-12, le=14)
+    # Q9: batas waktu mematikan semua relay saat agent berhenti; harus < TimeoutStopSec systemd.
+    stop_off_timeout_s: float = Field(gt=0)
 
 
 class TopicsConfig(_Model):

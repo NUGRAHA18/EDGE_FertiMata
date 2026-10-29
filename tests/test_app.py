@@ -33,7 +33,7 @@ async def test_agent_starts_and_stops_cleanly(config, hal, clock):
     assert hal.world.trolley.position_mm > 0  # simulator ikut berjalan
 
     stop.set()
-    await asyncio.wait_for(task, 1)
+    await drive(clock, task)
     assert not hal.bus.is_open and not hal.gpio.is_open and not hal.camera.is_open
 
 
@@ -48,7 +48,7 @@ async def test_agent_runs_link_and_stops_it(config, hal, clock):
     assert transport.subscriptions == ["fertimata/+/command"]
     assert "fertimata/JETSON-01/status" in [t for t, _ in transport.published]
     stop.set()
-    await asyncio.wait_for(task, 1)
+    await drive(clock, task)
     assert not transport.started
 
 
@@ -62,7 +62,7 @@ async def test_background_crash_stops_agent(config, hal, clock):
     await drive(clock, agent.ready.wait())
     await clock.advance(1.0)
     with pytest.raises(RuntimeError, match="simulator rusak"):
-        await asyncio.wait_for(task, 1)
+        await drive(clock, task)
     assert not hal.bus.is_open
 
 
@@ -186,7 +186,7 @@ async def test_s1_all_relays_off_before_mqtt_starts(config, hal, clock):
     await drive(clock, agent.ready.wait())
     assert transport.relays_at_start is not None and not any(transport.relays_at_start)
     stop.set()
-    await asyncio.wait_for(task, 1)
+    await drive(clock, task)
 
 
 async def _running_agent(config, hal, clock):
@@ -227,7 +227,7 @@ async def test_command_reaches_relay_and_acks(config, hal, clock):
         assert len(transport.messages("/command/ack")) == 1
     finally:
         stop.set()
-        await asyncio.wait_for(task, 1)
+        await drive(clock, task)
 
 
 async def test_heartbeat_reports_relay_states(config, hal, clock):
@@ -247,7 +247,7 @@ async def test_heartbeat_reports_relay_states(config, hal, clock):
         assert jetson[-1]["metadata"]["agentVersion"]
     finally:
         stop.set()
-        await asyncio.wait_for(task, 1)
+        await drive(clock, task)
 
 
 # --- F5: daya ------------------------------------------------------------------------------------
@@ -298,7 +298,7 @@ async def test_f5_5_outage_stops_pump_and_recovers(config, hal, clock):
         assert _jetson_statuses(transport)[-1]["powerSource"] == "MAINS"
     finally:
         stop.set()
-        await asyncio.wait_for(task, 1)
+        await drive(clock, task)
 
 
 async def test_power_source_known_before_mqtt_when_booting_on_battery(config, hal, clock):
@@ -309,7 +309,7 @@ async def test_power_source_known_before_mqtt_when_booting_on_battery(config, ha
         assert first["powerSource"] == "BATTERY"
     finally:
         stop.set()
-        await asyncio.wait_for(task, 1)
+        await drive(clock, task)
 
 
 async def test_soc_temperature_reported(config, hal, clock):
@@ -320,7 +320,7 @@ async def test_soc_temperature_reported(config, hal, clock):
         assert soc and soc[0] == 48.0
     finally:
         stop.set()
-        await asyncio.wait_for(task, 1)
+        await drive(clock, task)
 
 
 async def test_tank_solution_reported_after_boot(config, hal, clock):
@@ -333,7 +333,7 @@ async def test_tank_solution_reported_after_boot(config, hal, clock):
         assert not hal.world.output_on("ec_power")
     finally:
         stop.set()
-        await asyncio.wait_for(task, 1)
+        await drive(clock, task)
 
 
 async def test_trolley_limits_reported_and_homing_works_in_agent(config, hal, clock):
@@ -351,7 +351,7 @@ async def test_trolley_limits_reported_and_homing_works_in_agent(config, hal, cl
         assert data[-1] == {"trolley.home_limit": 1, "trolley.end_limit": 0, "trolley.station": 0}
     finally:
         stop.set()
-        await asyncio.wait_for(task, 1)
+        await drive(clock, task)
 
 
 async def test_agent_wires_patrol_schedule(config, hal, clock):
@@ -362,7 +362,7 @@ async def test_agent_wires_patrol_schedule(config, hal, clock):
     assert agent.patrol is not None and len(agent.patrol.tasks) == 1  # jadwal D3 aktif
     assert agent.patrol.on_read in agent.poller.read_listeners
     stop.set()
-    await asyncio.wait_for(task, 1)
+    await drive(clock, task)
     assert agent.patrol.tasks == []
 
 
@@ -403,7 +403,7 @@ async def test_agent_executes_virtual_trolley_command(config, hal, clock):
         assert ack["success"] is False and ack["errorMessage"].startswith("UNSUPPORTED")
     finally:
         stop.set()
-        await asyncio.wait_for(task, 1)
+        await drive(clock, task)
 
 
 async def _until(predicate) -> None:
@@ -413,3 +413,49 @@ async def _until(predicate) -> None:
             return
         await asyncio.sleep(0)
     raise AssertionError("kondisi tidak tercapai")
+
+
+# --- Q9: berhenti normal mematikan semua relay ---------------------------------------------------
+
+
+async def test_normal_stop_turns_every_relay_off(config, hal, clock):
+    _, transport, stop, task = await _running_agent(config, hal, clock)
+    transport.deliver(
+        "fertimata/PANEL-01/command",
+        {
+            "commandUid": "q9-1",
+            "actuatorCode": "DIST-PUMP",
+            "command": "ON",
+            "parameters": {"durationSeconds": 600},
+        },
+    )
+    await clock.advance(0.2)
+    assert hal.world.output_on("pump_dist")
+    hal.world.relay_for("stirrer").force_channel(3, True)  # kanal cadangan ikut dimatikan
+
+    stop.set()
+    await drive(clock, task)
+    # Watchdog 600 s tidak sempat mematikan pompa: tanpa Q9 pompa tetap ON sampai agent start lagi.
+    assert not hal.world.output_on("pump_dist")
+    relays = [hal.world.relay_for("pump_dist"), hal.world.relay_for("stirrer")]
+    assert not any(on for relay in relays for on in relay.state)
+    panel = [p for _, p in transport.messages("PANEL-01/status")]
+    assert panel[-1]["actuators"]["DIST-PUMP"] == "OFF"
+
+
+async def test_stop_off_is_bounded_when_bus_hangs(config, hal, clock, caplog):
+    agent, _, stop, task = await _running_agent(config, hal, clock)
+
+    async def hang(cause: str = "boot") -> bool:
+        await hal.clock.sleep(10**6)
+        return True
+
+    agent.outputs.all_off = hang  # type: ignore[method-assign]
+    started = clock.monotonic()
+    stop.set()
+    await drive(clock, task, step=0.5)
+    elapsed = clock.monotonic() - started
+    limit = config.agent.stop_off_timeout_s
+    assert limit <= elapsed < limit + 2
+    assert "relay tidak sempat dimatikan sebelum berhenti" in caplog.text
+    assert not hal.bus.is_open

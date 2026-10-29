@@ -27,7 +27,7 @@ Sumber: Arsitektur §5.3, §5.4, §6, §7.4, §7.5, §9, §12, dan kebijakan int
 | S17 | Perintah lewat `expiresAt` tidak dijalankan | `commands` | |
 | S18 | **Jetson tidak pernah di-shutdown oleh software** | Tidak ada pemanggilan `shutdown`/`poweroff` di kode | grep di CI |
 | S19 | Relay yang baca baliknya tidak cocok → coba OFF, alert `RELAY_MISMATCH`, tandai output rusak | `outputs` | |
-| S20 | Proses edge mati → relay tidak boleh tertinggal ON tanpa batas | Mode nyala-berwaktu relay bila didukung (P-H4) + systemd restart → S1 | |
+| S20 | Proses edge mati → relay tidak boleh tertinggal ON tanpa batas | Mode nyala-berwaktu relay bila didukung (P-H4) + systemd restart → S1. Berhenti **normal** (SIGTERM, `systemctl stop`): semua relay OFF + baca balik sebelum keluar, dibatasi `agent.stop_off_timeout_s` (Q9) | berhenti dengan pompa ON → semua OFF; bus macet → berhenti tetap dalam batas waktu |
 
 ## Catatan penting
 
@@ -48,4 +48,5 @@ Sumber: Arsitektur §5.3, §5.4, §6, §7.4, §7.5, §9, §12, dan kebijakan int
 - Test per aturan: `tests/test_outputs.py` (S1, S2, S8 reaksi, S14 jeda polling, S19) dan `tests/test_safety.py`
   (S3–S6, S8, S12, S13, S14, S16). S7 dan S10/S11 di `tests/test_power.py`, S9 di `tests/test_analog.py`,
   S12/S13/S15/S16 untuk gerak trolley di `tests/test_trolley.py`.
-  S17 di `tests/test_link.py`, S18 di `tests/test_codebase_rules.py`.
+  S17 di `tests/test_link.py`, S18 di `tests/test_codebase_rules.py`, S20 (berhenti normal, Q9) di
+  `tests/test_app.py`.

@@ -220,3 +220,9 @@ def test_install_rejects_unknown_option():
         encoding="utf-8",
     )
     assert result.returncode == 2 and "tidak dikenal" in result.stderr
+
+
+def test_stop_off_timeout_fits_systemd_stop_timeout():
+    # Q9: OFF-semua saat berhenti harus selesai sebelum systemd mengirim SIGKILL.
+    stop_timeout = int(_ini(UNIT)["Service"]["TimeoutStopSec"])
+    assert load_config(EXAMPLE_CONFIG).agent.stop_off_timeout_s < stop_timeout

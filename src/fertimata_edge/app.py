@@ -241,6 +241,32 @@ class Agent:
             if task is not stop_task and not task.cancelled() and task.exception():
                 raise task.exception()  # type: ignore[misc]
 
+    async def _all_off_on_stop(self) -> None:
+        """Q9: berhenti normal tidak meninggalkan relay ON.
+
+        Watchdog durasi (S2) ikut berhenti bersama agent, jadi pompa yang ON akan tetap ON sampai
+        agent start lagi (S1). Dibatasi `agent.stop_off_timeout_s` supaya bus yang macet tidak
+        membuat systemd membunuh agent di tengah jalan (`TimeoutStopSec`).
+        """
+        if self.bus.task is None or self.bus.task.done():
+            return  # bus tidak pernah jalan atau sudah mati: tidak ada yang bisa ditulis
+        off = asyncio.ensure_future(self.outputs.all_off(cause="stop"))
+        limit = asyncio.ensure_future(self.hal.clock.sleep(self.config.agent.stop_off_timeout_s))
+        try:
+            await asyncio.wait({off, limit}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            limit.cancel()
+        if not off.done():
+            off.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await off
+            log.error(
+                "relay tidak sempat dimatikan sebelum berhenti, S1 mematikannya saat start",
+                extra=fields(timeout_s=self.config.agent.stop_off_timeout_s),
+            )
+        elif off.exception() is not None or not off.result():
+            log.error("tidak semua relay terbukti OFF saat berhenti, lihat RELAY_MISMATCH/log")
+
     async def _shutdown(self) -> None:
         log.info("agent berhenti")
         self.notifier.stopping()
@@ -255,6 +281,8 @@ class Agent:
         await self.soc.stop()
         await self.power.stop()
         await self.safety.stop()
+        # Sesudah semua modul yang bisa menyalakan output berhenti, sebelum bus ditutup.
+        await self._all_off_on_stop()
         await self.outputs.stop()
         if self.link is not None:
             with contextlib.suppress(Exception):

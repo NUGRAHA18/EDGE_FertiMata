@@ -94,7 +94,7 @@ async def test_agent_notifies_ready_watchdog_and_stopping(config, hal, clock):
     assert rec.states.count("WATCHDOG=1") >= before + 2
 
     stop.set()
-    await asyncio.wait_for(task, 1)
+    await drive(clock, task)
     assert rec.states[-1] == "STOPPING=1"
 
 
@@ -109,7 +109,7 @@ async def test_agent_without_watchdog_does_not_stop_itself(config, hal, clock):
     assert not task.done()
     assert "WATCHDOG=1" not in rec.states and rec.states[0].startswith("READY=1")
     stop.set()
-    await asyncio.wait_for(task, 1)
+    await drive(clock, task)
 
 
 @pytest.mark.skipif(not hasattr(socket, "AF_UNIX"), reason="AF_UNIX tidak ada (Windows)")

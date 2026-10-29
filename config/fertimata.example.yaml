@@ -11,6 +11,7 @@ agent:
   log_level: INFO
   hal: real                 # real | fake (fake = laptop tanpa hardware)
   utc_offset_h: 7           # WIB: jadwal patroli dan nama berkas foto (payload tetap UTC)
+  stop_off_timeout_s: 15    # Q9: batas mematikan semua relay saat berhenti (< TimeoutStopSec 30 di unit)
 
 mqtt:
   host: 127.0.0.1

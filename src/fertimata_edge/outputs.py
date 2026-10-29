@@ -2,7 +2,8 @@
 
 - S1: `all_off()` menulis OFF ke **semua** kanal setiap relay lalu membaca balik, sebelum logika
   lain jalan (Arsitektur §5, §12.1). Relay yang belum menjawab saat boot di-OFF-kan begitu
-  pertama kali menjawab, sebelum boleh dipakai.
+  pertama kali menjawab, sebelum boleh dipakai. Hal yang sama dipanggil saat agent berhenti
+  normal (Q9), karena watchdog durasi ikut berhenti bersama agent.
 - S19: setiap tulis diikuti baca balik. Tidak cocok → coba OFF, alert `RELAY_MISMATCH`, output
   ditandai rusak (ON ditolak sampai agent di-restart setelah panel diperiksa).
 - S2: output yang ON dimatikan sendiri setelah `min(durationSeconds, max_on_s)`. Alert
@@ -140,15 +141,15 @@ class Outputs:
 
     # --- S1 -----------------------------------------------------------------------------------
 
-    async def all_off(self) -> bool:
-        """S1: semua kanal semua relay OFF + baca balik. True bila semuanya terbukti OFF."""
+    async def all_off(self, cause: str = "boot") -> bool:
+        """S1/Q9: semua kanal semua relay OFF + baca balik. True bila semuanya terbukti OFF."""
         ok = True
         async with self._lock:
             for device in self.profiles:
-                ok = await self._init_device(device) and ok
+                ok = await self._init_device(device, cause) and ok
         return ok
 
-    async def _init_device(self, device: str) -> bool:
+    async def _init_device(self, device: str, cause: str = "boot") -> bool:
         profile = self.profiles[device]
         self._write_seq[device] += 1
         for ch in range(profile.channels):
@@ -157,10 +158,16 @@ class Outputs:
         try:
             states = await profile.read_states(self.bus, Priority.STOP)
         except BUS_ERRORS as err:
-            log.error(
-                "relay belum bisa dimatikan saat mulai, dicoba lagi saat menjawab",
-                extra=fields(device=device, err=err),
-            )
+            if cause == "boot":
+                log.error(
+                    "relay belum bisa dimatikan saat mulai, dicoba lagi saat menjawab",
+                    extra=fields(device=device, err=err),
+                )
+            else:
+                log.error(
+                    "relay tidak bisa dipastikan OFF",
+                    extra=fields(device=device, cause=cause, err=err),
+                )
             return False
         self.initialized[device] = True
         for name in self._outputs_of(device):
@@ -170,8 +177,10 @@ class Outputs:
         changed = self._apply_readback(device, states)
         stuck = [ch for ch, on in enumerate(states) if on]
         for ch in stuck:
-            self._mismatch(device, ch, wanted=False, actual=True, cause="boot")
-        log.info("relay dimatikan semua", extra=fields(device=device, stuck=stuck or None))
+            self._mismatch(device, ch, wanted=False, actual=True, cause=cause)
+        log.info(
+            "relay dimatikan semua", extra=fields(device=device, cause=cause, stuck=stuck or None)
+        )
         if changed:
             self._notify(device)
         return not stuck
