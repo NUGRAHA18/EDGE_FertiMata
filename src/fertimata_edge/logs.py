@@ -1,8 +1,4 @@
-"""Logging terstruktur ke stdout (ditangkap journald di Jetson).
-
-Format satu baris `waktu level logger pesan kunci=nilai`, supaya mudah di-grep di `journalctl`.
-Data terstruktur diberikan lewat `extra=fields(...)`.
-"""
+"""Log satu baris `waktu level logger pesan kunci=nilai` ke stdout/journald; data via `fields()`."""
 
 from __future__ import annotations
 

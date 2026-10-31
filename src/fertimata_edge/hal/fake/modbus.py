@@ -19,10 +19,7 @@ class Transaction:
 
 
 class FakeModbusBus(ModbusBus):
-    """Menjawab dari perangkat palsu. Perangkat yang mati/diam → `ModbusTimeout` seketika.
-
-    Semua transaksi dicatat di `log` supaya test bisa memeriksa urutan tulis (mis. S12).
-    """
+    """Bus palsu; perangkat diam → `ModbusTimeout` seketika. Transaksi dicatat di `log`."""
 
     def __init__(self, world: FakeWorld) -> None:
         self.world = world

@@ -1,13 +1,5 @@
-"""Kesehatan sumber data per device logis, dasar keputusan heartbeat (Kontrak §4.2).
-
-Device logis yang perangkatnya tidak menjawab tidak diberi heartbeat, sehingga backend
-menandainya OFFLINE sendiri. Sumber non-Modbus (`gpio`, `soc`) ada di proses ini, jadi selalu
-hidup selama agent hidup. Sumber Modbus dianggap belum hidup sampai bus manager (F3) melaporkan
-jawaban pertama.
-
-Device dengan beberapa sumber tetap hidup selama minimal satu sumber menjawab (usulan Q3 di
-TASKS.md); sumber yang diam dilaporkan lewat alert `MODBUS_TIMEOUT` dan metriknya dihilangkan.
-"""
+"""Kesehatan sumber per device logis (§4.2): device tanpa sumber hidup tidak diberi heartbeat.
+gpio/soc selalu hidup; Modbus hidup sejak jawaban pertama; multi-sumber cukup satu menjawab (Q3)."""
 
 from __future__ import annotations
 

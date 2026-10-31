@@ -1,9 +1,5 @@
-"""Model dan pemuat `fertimata.yaml`.
-
-Semua angka hardware (alamat, kanal, batas waktu, ambang, kalibrasi) hanya hidup di berkas config
-(Arsitektur §11). Modul ini memvalidasinya saat startup supaya kesalahan ketik tertangkap sebelum
-satu relay pun disentuh. Kunci yang tidak dikenal ditolak (`extra="forbid"`).
-"""
+"""Model dan pemuat `fertimata.yaml`; semua angka hardware hanya di config (Arsitektur §11).
+Divalidasi saat startup sebelum relay disentuh; kunci tak dikenal ditolak (`extra="forbid"`)."""
 
 from __future__ import annotations
 
@@ -31,17 +27,14 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-# --------------------------------------------------------------------------------------------
-# Bagian-bagian config
-# --------------------------------------------------------------------------------------------
+# --- Bagian config --------------------------------------------------------------------------
 
 
 class AgentConfig(_Model):
     site: str
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     hal: Literal["real", "fake"]
-    # Zona waktu untuk hal yang dibaca manusia: jadwal patroli dan nama berkas foto (WIB = 7).
-    # Payload MQTT tetap UTC.
+    # Zona waktu jadwal patroli dan nama foto (WIB = 7); payload MQTT tetap UTC.
     utc_offset_h: float = Field(ge=-12, le=14)
     # Q9: batas waktu mematikan semua relay saat agent berhenti; harus < TimeoutStopSec systemd.
     stop_off_timeout_s: float = Field(gt=0)
@@ -110,8 +103,7 @@ class RegisterSpec(_Model):
     fc: Literal[3, 4]
     address: int = Field(ge=0, le=0xFFFF)
     type: Literal["u16", "s16", "u32", "s32"] = "u16"
-    # Urutan word nilai 32 bit. Wajib ditulis untuk u32/s32 karena antar vendor berbeda
-    # (PZEM: word rendah dulu; banyak sensor cahaya: word tinggi dulu).
+    # Urutan word u32/s32, wajib karena beda antar vendor (PZEM lo_hi, banyak sensor cahaya hi_lo).
     word_order: Literal["lo_hi", "hi_lo"] | None = None
     scale: float = 1.0
 
@@ -127,12 +119,8 @@ class RegisterSpec(_Model):
 
 
 class RelayMapConfig(_Model):
-    """Cara menulis/membaca kanal relay Modbus (Arsitektur §4.5, belum terverifikasi: P-H4).
-
-    Dua pola umum: **A** coil (`write_fc: 5`, baca `read_fc: 1`) dan **B** holding register
-    (`write_fc: 6`, nilai ON/OFF tertentu, mis. 0x0100/0x0200). Semua angka sengaja wajib ditulis
-    di config karena belum dicek di modul yang dibeli. Kanal Rn ada di alamat `*_base + n`.
-    """
+    """Tulis/baca kanal relay Modbus (§4.5, belum terverifikasi P-H4); kanal Rn di `*_base + n`.
+    Pola A coil (`write_fc: 5`, `read_fc: 1`) atau B holding (`write_fc: 6`, mis. 0x0100/0x0200)."""
 
     write_fc: Literal[5, 6]
     write_base: int = Field(ge=0, le=0xFFFF)
@@ -204,8 +192,7 @@ class PollingConfig(_Model):
     tank_s: float = Field(gt=0)
     soc_s: float = Field(gt=0)
     trolley_s: float = Field(gt=0)  # telemetri trolley.* berkala (juga saat berubah)
-    # Telemetri PZEM-01 dikirim lebih jarang daripada dibaca: deteksi lokal (S7, S10, S11) tetap
-    # memakai setiap bacaan `pzem_s`, backend cukup menyimpan satu bacaan per interval ini.
+    # PZEM dikirim tiap interval ini; deteksi lokal (S7, S10, S11) memakai tiap bacaan `pzem_s`.
     pzem_publish_s: float = Field(gt=0)
 
     @model_validator(mode="after")
@@ -281,15 +268,13 @@ class TravelConfig(_Model):
 
 
 class SafetyConfig(_Model):
-    # Nama kelompok output, mis. "dosing" = dose_n + dose_p + dose_k + stirrer. Boleh dipakai di
-    # exclusive_groups dan daftar blokir di bawah.
+    # Kelompok output (mis. dosing = dose_n/p/k + stirrer) untuk exclusive_groups dan daftar blokir.
     output_groups: dict[str, list[str]] = Field(default_factory=dict)
     exclusive_groups: list[list[str]]
     blocked_on_backup_power: list[str]
     blocked_on_float_low: list[str]
-    # Output kunci tidak boleh berubah (ON maupun OFF) selama salah satu output di daftarnya ON:
-    # DIR saat RUN ON (S12), pan saat trolley jalan (S14, Q5). Mengubah arah bukan "berhenti",
-    # jadi ini satu-satunya pengecualian aturan "OFF tidak pernah diblokir".
+    # Output kunci tak boleh berubah (ON/OFF) selama output di daftarnya ON: DIR saat RUN (S12), pan
+    # saat trolley jalan (S14, Q5). Satu-satunya pengecualian "OFF tidak pernah diblokir".
     blocked_while_on: dict[str, list[str]] = Field(default_factory=dict)
     travel: TravelConfig | None = None
     float_max_age_s: float = Field(gt=0)
@@ -325,8 +310,7 @@ class PhCalibration(_Model):
 
     @model_validator(mode="after")
     def _monotonic(self) -> PhCalibration:
-        # Tegangan elektroda berubah searah dengan pH; buffer tertukar atau probe rusak
-        # terlihat sebagai urutan yang tidak monoton.
+        # Tegangan elektroda monoton terhadap pH; tidak monoton = buffer tertukar atau probe rusak.
         voltages = [mv for mv, _ in self.points()]
         steps = [b - a for a, b in itertools.pairwise(voltages)]
         if steps and not (all(s > 0 for s in steps) or all(s < 0 for s in steps)):
@@ -432,8 +416,7 @@ class CameraConfig(_Model):
     patrol_schedule: list[str] = Field(default_factory=list)
     # Agent yang baru hidup setelah jam patroli masih menjalankannya bila belum lewat selama ini.
     patrol_catchup_min: float = Field(ge=0)
-    # F8.5: di bawah `disk_warn_free_gb` alert; di bawah `disk_stop_free_gb` foto tidak disimpan
-    # supaya sistem Jetson tidak kehabisan ruang. Data riset tidak pernah dihapus otomatis.
+    # F8.5: < warn → alert; < stop → foto tidak disimpan. Data riset tidak pernah dihapus.
     disk_warn_free_gb: float = Field(gt=0)
     disk_stop_free_gb: float = Field(gt=0)
 
@@ -509,13 +492,11 @@ class FakeConfig(_Model):
     ph_mv_per_ph: float = -180.0
     # Eksitasi papan EC mengganggu pH saat R5 ON (alasan urutan §6.3).
     ec_ph_interference_mv: float = 150.0
-    # Pompa pupuk (nama output → debit/kenaikan EC) menambah EC drum, supaya perintah mentah
-    # DOSING-N/P/K dari layanan dosing tim AI terlihat di telemetri. Kosong = EC drum tetap.
+    # Debit/kenaikan EC per pompa pupuk agar DOSING-N/P/K mentah terlihat; kosong = EC tetap.
     tank_volume_l: float = Field(default=150.0, gt=0)
     dose_pumps: dict[str, FakeDosePump] = Field(default_factory=dict)
     stirrer_output: str | None = None
-    # Stok yang dipompa ke drum baru terbaca probe setelah tercampur: konstanta waktu campur saat
-    # pompa aduk menyala dan saat diam (alasan Arsitektur §8.2 langkah 8 "tunggu EC stabil").
+    # Konstanta waktu campur saat pompa aduk ON/OFF (Arsitektur §8.2 "tunggu EC stabil").
     mix_tau_s: float = Field(default=20.0, gt=0)
     mix_idle_tau_s: float = Field(default=600.0, gt=0)
     image_width: int = Field(default=64, gt=0)
@@ -523,9 +504,7 @@ class FakeConfig(_Model):
     image_sharpness: float = Field(default=150.0, ge=0)  # variance of Laplacian foto palsu
 
 
-# --------------------------------------------------------------------------------------------
-# Akar config
-# --------------------------------------------------------------------------------------------
+# --- Akar config ----------------------------------------------------------------------------
 
 
 class Config(_Model):
@@ -697,9 +676,7 @@ class Config(_Model):
         return None
 
 
-# --------------------------------------------------------------------------------------------
-# Pemuat
-# --------------------------------------------------------------------------------------------
+# --- Pemuat ---------------------------------------------------------------------------------
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):

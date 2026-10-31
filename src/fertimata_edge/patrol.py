@@ -1,23 +1,5 @@
-"""Patroli kamera malam hari (Arsitektur §9.4–§9.6, §13; keputusan D1, D3; F8.3–F8.5).
-
-Urutan: homing → untuk tiap stasiun: `goto_station(n)` → tunggu `settle_s` → pan timur → tunggu
-`pan_settle_s` → foto → pan barat → tunggu → foto (stasiun genap dibalik bila `alternate_pan`) →
-pan timur → homing.
-
-- Gerak dan interlock sepenuhnya lewat `trolley` dan `safety`; patroli tidak menulis RUN/DIR
-  sendiri. Selama patroli, DIR/pan/RUN ON dari backend ditolak `BUSY`; RUN OFF tetap boleh (S3).
-- §9.6: kamera tidak terbaca → lewati foto, lanjut (alert `CAMERA_FAIL` di akhir). Kesalahan
-  trolley atau PLN padam → patroli batal di tempat, tanpa homing tambahan (modul trolley sudah
-  homing sendiri untuk END tak terduga).
-- §13 gerbang blur: ketajaman di bawah `camera.blur_threshold` → tunggu getaran reda dan ambil
-  ulang sekali. Yang lebih tajam disimpan dan ditandai `blurry` bila tetap di bawah ambang; data
-  riset tidak dibuang, penyaringan akhir urusan layanan AI.
-- D3: jadwal lokal (`camera.patrol_schedule`, waktu `agent.utc_offset_h`) supaya patroli tetap
-  jalan walau backend mati. Pemicu manual: aktuator virtual `TROLLEY-PATROL` (`virtual.py`, F8.4)
-  memanggil `run(trigger="manual")`; STOP memanggil `request_stop()` lalu menghentikan trolley.
-- Hasil: `PATROL_DONE` (INFO) untuk patroli selesai atau dihentikan dari aplikasi, `PATROL_FAILED`
-  (WARNING) untuk batal/tidak jalan (Kontrak §4.4).
-"""
+"""Patroli kamera (§9.4–§9.6, §13, D1, D3, F8.3–F8.5): homing → tiap stasiun pan timur/barat + foto.
+Gerak via `trolley`/`safety`; kamera gagal → lewati; PLN/trolley gagal → batal; blur → ulang 1×."""
 
 from __future__ import annotations
 
@@ -49,8 +31,7 @@ REASON_PAN = "PAN_FAILED"
 REASON_ABORTED = "PATROL_ABORTED"
 REASON_STOPPED = "PATROL_STOPPED"
 
-# Profil sensor yang bacaannya ikut dicatat di metadata foto (Protokol §4: suhu, kelembapan;
-# cahaya untuk memastikan lampu greenhouse menyala).
+# Sensor yang dicatat di metadata foto (Protokol §4); cahaya memastikan lampu menyala.
 ENVIRONMENT_PROFILES = frozenset({"xy_md02", "lux_rs485"})
 
 
@@ -252,8 +233,7 @@ class Patrol:
         return result
 
     def request_stop(self) -> bool:
-        """Minta patroli yang berjalan berhenti di langkah berikutnya. Trolley yang sedang jalan
-        dihentikan pemanggil (`trolley.halt`). False bila tidak ada patroli."""
+        """Hentikan patroli di langkah berikutnya (trolley oleh pemanggil); False bila tak ada."""
         if not self.running:
             return False
         self._stop_requested = True

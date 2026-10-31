@@ -1,13 +1,5 @@
-"""Protokol sd_notify systemd (F10.2): READY, STOPPING, dan ping watchdog.
-
-Unit `fertimata-edge.service` memakai `Type=notify` + `WatchdogSec`. Ping dikirim dari tugas di
-event loop, jadi loop yang macet (mis. pemanggilan blocking) berhenti mengirim ping dan systemd
-me-restart agent → S1 mematikan semua relay (S20). Tugas latar yang mati sudah menghentikan agent
-lewat `_wait`.
-
-Ditulis sendiri (±30 baris) supaya tidak menambah dependensi. Tanpa `NOTIFY_SOCKET` (laptop, test,
-dijalankan manual) semua pemanggilan diam.
-"""
+"""sd_notify systemd (F10.2): READY, STOPPING, ping watchdog dari event loop.
+Loop macet → ping berhenti → systemd restart → S1 (S20). Tanpa `NOTIFY_SOCKET` semua diam."""
 
 from __future__ import annotations
 
@@ -78,8 +70,7 @@ class SystemdNotifier:
         return self.notify("STOPPING=1")
 
     async def run_watchdog(self, clock: Clock) -> None:
-        """Ping setiap setengah `WatchdogSec` (sd_watchdog_enabled(3)). Tidak pernah selesai,
-        jadi hanya dijalankan bila `watchdog_enabled`."""
+        """Ping tiap ½ `WatchdogSec`; tidak pernah selesai (hanya bila `watchdog_enabled`)."""
         assert self.watchdog_s is not None
         interval = self.watchdog_s / 2
         while True:

@@ -1,10 +1,5 @@
-"""Penghubung perintah dari `link` ke eksekutor output (Kontrak §5).
-
-`link` sudah memeriksa kontrak (dedup, `expiresAt`, aktuator dikenal). `OutputCommandHandler`
-menjalankan sisanya: durasi wajib, interlock lokal (`safety`), urutan jeda S12, tulis + baca
-balik + watchdog (`outputs`). ACK sukses hanya setelah baca balik cocok (Kontrak §4.3).
-Perintah ke aktuator virtual (Kontrak §5.1) diteruskan `CommandRouter` ke `virtual.py`.
-"""
+"""Perintah dari `link` → interlock `safety` → jeda S12 → `outputs` (tulis, baca balik, watchdog).
+ACK sukses hanya bila baca balik cocok (Kontrak §4.3); aktuator virtual (§5.1) ke `virtual.py`."""
 
 from __future__ import annotations
 
@@ -31,8 +26,7 @@ REASON_UNSUPPORTED = "UNSUPPORTED"
 REASON_INVALID = "INVALID"
 REASON_NOT_READY = "NOT_READY"
 
-# Kosakata relay mentah dan aktuator virtual (Kontrak §5, §5.1). Backend menolak yang lain (400);
-# edge memeriksa lagi dan menjawab UNSUPPORTED.
+# Kosakata relay mentah dan aktuator virtual (Kontrak §5, §5.1); selain ini dijawab UNSUPPORTED.
 RELAY_ACTIONS = frozenset({"ON", "OFF"})
 VIRTUAL_ACTIONS: dict[str, frozenset[str]] = {
     "trolley_goto": frozenset({"HOME", "GOTO_STATION", "STOP"}),

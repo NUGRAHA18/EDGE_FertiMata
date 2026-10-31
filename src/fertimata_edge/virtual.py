@@ -1,19 +1,5 @@
-"""Aktuator virtual dari backend (Kontrak §5.1, BE-1, keputusan D2): perintah tingkat tinggi.
-
-- `TROLLEY-GOTO` (F7.5): `HOME`, `GOTO_STATION {"station": n}`, `STOP`.
-- `TROLLEY-PATROL` (F8.4): `START` (patroli manual, `Patrol.run(trigger="manual")`), `STOP`.
-
-Loop dosing (F9, `DOSING-LOOP`) dipindah ke layanan tim AI (keputusan 28 Okt). Layanan itu memakai
-perintah relay mentah `DOSING-N/P/K`, `STIRRER`, `DIST-PUMP` lewat backend, jadi tidak ada di sini.
-
-ACK sukses dengan state `ON` begitu urutan **dimulai** (Kontrak §4.3); urutan berjalan sebagai tugas
-latar. Selesai atau batal → status `actuators` `OFF` tanpa ACK baru, hasil lewat alert INFO
-(`TROLLEY_ARRIVED`, `PATROL_DONE`) atau WARNING. Prasyarat yang bisa diperiksa di depan (trolley
-terkunci/dipakai, daya S7, eksklusif S4–S6, disk penuh) menolak perintah lewat ACK gagal.
-
-`STOP` tidak pernah ditolak (S3): selalu mematikan RUN trolley dengan prioritas STOP, walaupun tidak
-ada urutan virtual yang berjalan.
-"""
+"""Aktuator virtual (Kontrak §5.1, D2): TROLLEY-GOTO (HOME/GOTO_STATION/STOP), TROLLEY-PATROL.
+ACK ON saat urutan dimulai (§4.3), hasil via status + alert; STOP tidak pernah ditolak (S3)."""
 
 from __future__ import annotations
 

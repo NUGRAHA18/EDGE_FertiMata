@@ -1,9 +1,5 @@
-"""Profil perangkat Modbus: dari register mentah ke metrik bersatuan (Arsitektur §4.5).
-
-Profil sensor membaca peta register gabungan: bawaan profil (hanya untuk yang terverifikasi di
-manual) ditimpa/ditambah `devices.<nama>.registers` di config. Profil yang belum terverifikasi
-tidak punya bawaan, jadi tidak di-poll sampai peta registernya diisi di config.
-"""
+"""Profil Modbus: register mentah → metrik bersatuan (§4.5); bawaan + `devices.<nama>.registers`.
+Profil belum terverifikasi tanpa bawaan: tidak di-poll sampai petanya diisi di config."""
 
 from __future__ import annotations
 
@@ -118,10 +114,7 @@ class RegisterMapProfile:
 
 
 def build_sensor_profiles(config: Config) -> dict[str, RegisterMapProfile]:
-    """Profil untuk setiap perangkat sensor yang di-poll terjadwal dan peta registernya lengkap.
-
-    Sensor suhu larutan tidak termasuk: dibaca di siklus analog (§6.3) bersama EC/pH.
-    """
+    """Profil sensor terjadwal yang petanya lengkap; suhu larutan dibaca siklus analog (§6.3)."""
     profiles: dict[str, RegisterMapProfile] = {}
     for name, device in config.devices.items():
         if device.metric_prefix is None or device.profile in ("relay_mb", "adc_7ch"):

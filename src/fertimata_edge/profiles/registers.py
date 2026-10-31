@@ -32,10 +32,7 @@ def encode(value: float, spec: RegisterSpec) -> list[int]:
 
 
 def read_blocks(specs: dict[str, RegisterSpec], max_span: int) -> list[tuple[int, int, int]]:
-    """Kelompokkan register menjadi blok baca (fc, alamat awal, jumlah) supaya transaksi sedikit.
-
-    Register dengan FC sama yang berdekatan dibaca sekali; blok tidak melebihi `max_span` word.
-    """
+    """Kelompokkan register FC sama yang berdekatan jadi blok (fc, alamat, jumlah) ≤ `max_span`."""
     blocks: list[tuple[int, int, int]] = []
     by_fc: dict[int, list[tuple[int, int]]] = {}
     for spec in specs.values():

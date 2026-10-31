@@ -19,3 +19,7 @@ data/
 # Berkas kunci/sementara Office
 ~$*
 ~WRL*.tmp
+
+# Dokumentasi internal (hanya lokal)
+/docs/
+/TASKS.md

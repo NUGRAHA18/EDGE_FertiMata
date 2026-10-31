@@ -1,18 +1,5 @@
-"""Gerak trolley: homing, menuju stasiun, pengawasan gerak mentah (Arsitektur §9.2–§9.6, F7.2–F7.4).
-
-- Jalan: R2 OFF → R3 = arah → jeda `dir_settle_ms` → R2 ON (S12, lewat `safety`). Berhenti: R2 OFF
-  prioritas STOP. Semua interlock `safety` (daya, dosing, limit) tetap berlaku untuk gerak otomatis.
-- `goto_station(n)` selalu mendekat dari selatan supaya titik berhenti berulang (§9.3); posisi
-  dihitung dari tepi aktif reed.
-- S15: tanpa pulsa reed `segment_timeout_s` atau total `travel_timeout_s` → berhenti + alert.
-  Berlaku juga untuk TROLLEY-RUN mentah dari backend (F7.4); setelah gerak mentah posisi tidak
-  diketahui sampai homing berikutnya.
-- S13: END/HOME tak terduga → berhenti (penjaga limit di `safety`), lalu homing dan gagal (§9.6).
-- S16: HOME dan END aktif bersamaan, atau limit yang baru ditinggalkan tetap aktif setelah pulsa
-  reed berikutnya → kabel limit putus: trolley dikunci sampai agent di-restart.
-- F7.3: `trolley.station`, `trolley.home_limit`, `trolley.end_limit` dikirim saat berubah dan
-  tiap `polling.trolley_s`. Stasiun hanya dikirim saat trolley diam di stasiun/HOME yang diketahui.
-"""
+"""Gerak trolley (§9.2–§9.6, F7.2–F7.4): R2 OFF → R3 arah → `dir_settle_ms` → R2 ON (S12).
+S15 timeout reed/total; S13 limit tak terduga → stop + homing; S16 kabel limit putus → kunci."""
 
 from __future__ import annotations
 
@@ -30,7 +17,7 @@ from .safety import Safety
 
 log = logging.getLogger(__name__)
 
-# Kode alasan (dipakai juga sebagai awalan pesan bila kelak dipicu perintah tingkat tinggi, F7.5).
+# Kode alasan (juga awalan pesan perintah tingkat tinggi, F7.5).
 REASON_LOCKED = "TROLLEY_LOCKED"
 REASON_REFUSED = "TROLLEY_REFUSED"
 REASON_STOPPED = "TROLLEY_STOPPED"
@@ -326,11 +313,8 @@ class Trolley:
         raise TrolleyError(REASON_LIMIT, "trolley sampai di ujung rel sebelum stasiun tujuan")
 
     def hold_raw_commands(self, text: str = "trolley sedang bergerak otomatis") -> None:
-        """Tolak DIR/pan dan RUN ON dari backend (`BUSY`); RUN OFF tetap boleh (S3).
-
-        Berhitung: patroli memegang kunci selama seluruh putaran, gerak otomatis di dalamnya
-        memegang lagi, dan kunci baru dilepas setelah pemegang terakhir selesai.
-        """
+        """Tolak DIR/pan dan RUN ON backend (`BUSY`); RUN OFF tetap boleh (S3).
+        Berhitung: kunci dilepas setelah pemegang terakhir (patroli, gerak otomatis) selesai."""
         self._holds += 1
         if self._holds > 1:
             return

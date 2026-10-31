@@ -23,11 +23,7 @@ _FRACTION = re.compile(r"\.(\d+)")
 
 
 def parse_iso(text: str) -> datetime:
-    """Baca waktu ISO-8601 dari backend (`...Z` atau offset).
-
-    Python 3.10 belum menerima `Z` dan hanya menerima pecahan 3 atau 6 digit, padahal `Instant`
-    Java bisa menulis 1–9 digit (mis. `.123456789Z`). Pecahan dinormalkan ke 6 digit.
-    """
+    """ISO-8601 backend (`Z`/offset); pecahan 1–9 digit (`Instant` Java) jadi 6 digit (Py 3.10)."""
     text = text.strip()
     if text.endswith(("Z", "z")):
         text = text[:-1] + "+00:00"
@@ -73,11 +69,7 @@ class FakeClock(Clock):
         await future
 
     async def advance(self, seconds: float) -> None:
-        """Majukan jam, membangunkan setiap `sleep` sesuai urutan tenggatnya.
-
-        Setelah tiap kebangunan, loop diberi kesempatan berjalan supaya tugas yang langsung
-        tidur lagi (mis. ticker) ikut terjadwal dengan benar di dalam rentang yang sama.
-        """
+        """Majukan jam, bangunkan `sleep` urut tenggat; loop diberi giliran tiap bangun."""
         target = self._mono + seconds
         while self._sleepers and self._sleepers[0][0] <= target:
             deadline, _, future = heapq.heappop(self._sleepers)

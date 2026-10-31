@@ -1,10 +1,5 @@
-"""Transport MQTT: antarmuka + implementasi paho-mqtt.
-
-paho menjalankan jaringannya di thread sendiri (`loop_start`), dan setiap callback dipindahkan ke
-event loop asyncio lewat `call_soon_threadsafe`. Pola ini dipilih ketimbang aiomqtt karena
-ProactorEventLoop di Windows tidak mendukung `add_reader`, sedangkan agent harus bisa jalan di
-laptop Windows dan Jetson.
-"""
+"""Transport MQTT paho (`loop_start`); callback dipindah ke event loop via `call_soon_threadsafe`.
+Bukan aiomqtt: ProactorEventLoop Windows tidak punya `add_reader`."""
 
 from __future__ import annotations
 

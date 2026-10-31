@@ -1,9 +1,5 @@
-"""Profil `relay_mb`: tulis/baca kanal relay Modbus menurut `devices.<nama>.relay` (P-H4).
-
-Profil A (coil) dan B (holding register) sama-sama didukung; mana yang benar untuk modul yang
-dibeli belum terverifikasi, jadi pilihannya hanya ada di config (Arsitektur §4.5, §15 no. 1).
-Galat bus (`ModbusTimeout`, `ModbusDeviceError`, `BusUnavailable`) diteruskan ke pemanggil.
-"""
+"""Profil `relay_mb`: kanal relay sesuai `devices.<nama>.relay` (A coil / B holding, P-H4).
+Galat bus (`ModbusTimeout`, `ModbusDeviceError`, `BusUnavailable`) diteruskan ke pemanggil."""
 
 from __future__ import annotations
 

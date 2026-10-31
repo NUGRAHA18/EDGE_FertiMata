@@ -1,8 +1,4 @@
-"""Suhu SoC Jetson dari sysfs (`/sys/class/thermal/thermal_zone*/temp`, satuan m°C).
-
-Pola berkas ada di config (`power.soc_thermal_glob`). Nama zona di Jetson Orin Nano belum dicek,
-jadi diambil nilai tertinggi dari semua zona yang cocok: yang terpanas yang menentukan peringatan.
-"""
+"""Suhu SoC Jetson dari sysfs (`power.soc_thermal_glob`, m°C); diambil zona terpanas."""
 
 from __future__ import annotations
 

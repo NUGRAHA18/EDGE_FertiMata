@@ -1,10 +1,5 @@
-"""Bus Modbus RTU asli lewat pymodbus (Arsitektur §4.1).
-
-Hanya modul `hal/real*` yang boleh mengimpor pymodbus. Retry diatur bus manager, jadi retry
-internal pymodbus dimatikan. Timeout dipasang per transaksi: pymodbus membaca
-`comm_params.timeout_connect` setiap kali menunggu jawaban, dan bus manager menjamin hanya ada
-satu transaksi dalam satu waktu.
-"""
+"""Bus Modbus RTU asli via pymodbus (§4.1); retry internal mati, retry diatur bus manager.
+Timeout per transaksi lewat `comm_params.timeout_connect` (aman: satu transaksi sekaligus)."""
 
 from __future__ import annotations
 

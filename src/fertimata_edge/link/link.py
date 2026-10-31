@@ -1,10 +1,5 @@
-"""Link MQTT: kirim telemetri/status/ACK/alert/AI, terima perintah (Kontrak MQTT).
-
-Alur perintah (Kontrak §5): topik → device, JSON → payload, buang duplikat `commandUid`,
-tolak yang kedaluwarsa (`EXPIRED`, keputusan D5), tolak device/aktuator/perintah asing
-(`UNSUPPORTED`), lalu teruskan ke `CommandHandler` dan balas satu ACK. Perintah diproses satu per
-satu sesuai urutan datang, supaya ON lalu OFF tidak tertukar.
-"""
+"""Link MQTT: kirim telemetri/status/ACK/alert/AI, terima perintah (Kontrak §5).
+Perintah berurutan: dedup `commandUid`, tolak EXPIRED (D5)/UNSUPPORTED, lalu handler + satu ACK."""
 
 from __future__ import annotations
 
@@ -150,11 +145,7 @@ class Link:
         metadata: dict[str, Any] | None = None,
         force: bool = False,
     ) -> bool:
-        """Kirim alert, kecuali tipe yang sama untuk device ini baru saja dikirim (Kontrak §4.4).
-
-        INFO tidak dijeda: isinya hasil satu kejadian (patroli selesai, trolley tiba), bukan kondisi
-        yang berulang, dan backend mencatat setiap INFO tanpa menahan duplikat.
-        """
+        """Kirim alert kecuali tipe sama untuk device ini baru dikirim (§4.4); INFO tak dijeda."""
         key = (device_id, type)
         now = self.clock.monotonic()
         last = self._alert_sent.get(key)

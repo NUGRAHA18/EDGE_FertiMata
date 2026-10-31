@@ -1,23 +1,10 @@
-"""Kalibrasi EC/pH dan simpan hasilnya ke `fertimata.yaml` (TASKS F6.6, Arsitektur §8.3).
+"""Kalibrasi EC/pH ke `fertimata.yaml` (F6.6, §8.3); `--write` hanya ganti nilai itu (+ `.bak`).
+Hentikan agent dulu (satu pemilik RS485, §4.6); alat ini mematikan semua relay (S1).
 
-Satu perintah untuk satu larutan: celupkan probe, tunggu stabil, lalu jalankan dengan `--point`.
-Alat ini membaca tegangan median dengan urutan R5 yang sama seperti agent (§6.3), memeriksa
-hasilnya, dan dengan `--write` mengganti nilai itu saja di berkas config (komentar tetap utuh,
-salinan lama disimpan sebagai `.bak`).
-
-PENTING: hentikan agent dulu (`sudo systemctl stop fertimata-edge`). Hanya satu program yang boleh
-memakai port RS485 (Arsitektur §4.6). Saat mulai, alat ini mematikan semua relay (S1).
-
-Contoh:
-    # EC: larutan 1413 µS/cm, lalu 12,88 mS/cm (bilas probe dengan aquades di antaranya)
-    python tools/calibrate_ec_ph.py --config /etc/fertimata/fertimata.yaml --point ec1413
-    python tools/calibrate_ec_ph.py --config /etc/fertimata/fertimata.yaml --point ec1413 --write
-    # pH: buffer 6,86 dulu, lalu 4,01 dan/atau 9,18
-    python tools/calibrate_ec_ph.py --config /etc/fertimata/fertimata.yaml --point ph686 --write
-    # Sensor suhu larutan belum terpasang: isi suhu dari termometer
-    python tools/calibrate_ec_ph.py --config ... --point ec1413 --temperature 26.5 --write
-    # Latihan tanpa hardware (simulator config dev)
-    python tools/calibrate_ec_ph.py --config config/fertimata.dev.yaml --point ph686
+Contoh (titik: ec1413, ec12880; ph686 dulu, lalu ph401 dan/atau ph918):
+python tools/calibrate_ec_ph.py --config /etc/fertimata/fertimata.yaml --point ec1413 --write
+python tools/calibrate_ec_ph.py --config ... --point ph686 --temperature 26.5 --write
+python tools/calibrate_ec_ph.py --config config/fertimata.dev.yaml --point ph686  # simulator
 """
 
 from __future__ import annotations

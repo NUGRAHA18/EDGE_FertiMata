@@ -1,19 +1,5 @@
-"""Model semua output relay: tulis + baca balik, watchdog durasi, dan pemantauan relay.
-
-- S1: `all_off()` menulis OFF ke **semua** kanal setiap relay lalu membaca balik, sebelum logika
-  lain jalan (Arsitektur §5, §12.1). Relay yang belum menjawab saat boot di-OFF-kan begitu
-  pertama kali menjawab, sebelum boleh dipakai. Hal yang sama dipanggil saat agent berhenti
-  normal (Q9), karena watchdog durasi ikut berhenti bersama agent.
-- S19: setiap tulis diikuti baca balik. Tidak cocok → coba OFF, alert `RELAY_MISMATCH`, output
-  ditandai rusak (ON ditolak sampai agent di-restart setelah panel diperiksa).
-- S2: output yang ON dimatikan sendiri setelah `min(durationSeconds, max_on_s)`. Alert
-  `OUTPUT_TIMEOUT` hanya bila `max_on_s` yang memotong (usulan Q1).
-- S8: IN1 (float LOW) dibaca tiap `polling.relays_s` dan dikirim sebagai telemetri (usulan Q2).
-  Terbuka atau basi → output `blocked_on_float_low` yang ON dimatikan.
-- S14: selama output jalan trolley ON, polling sensor dijeda.
-
-State yang dilaporkan selalu hasil baca balik, bukan hasil tulisan (Kontrak §4.2).
-"""
+"""Output relay: S1/Q9 all_off + baca balik; S19 tak cocok → OFF, RELAY_MISMATCH, ON dikunci;
+S2 watchdog `min(durasi, max_on_s)`; S8 float → OFF; S14 jeda polling. State = baca balik (§4.2)."""
 
 from __future__ import annotations
 
@@ -208,9 +194,8 @@ class Outputs:
             if on and not self.initialized[out.device] and not await self._init_device(out.device):
                 return self._offline(name)
             self._write_seq[out.device] += 1
-            # Baca polling yang dimulai sesudah kenaikan di atas tapi dijalankan bus sesudah tulisan
-            # ini melihat state baru sebelum model diperbarui; tanpa penanda ini ia dianggap
-            # "ON tanpa perintah" (S19 palsu).
+            # Polling yang bersilangan dengan tulis ini melihat state baru sebelum model diperbarui;
+            # tanpa penanda ini terbaca "ON tanpa perintah" (S19 palsu).
             self._writing[out.device] += 1
             try:
                 try:
@@ -220,9 +205,8 @@ class Outputs:
                     self._writing[out.device] -= 1
                     self._write_seq[out.device] += 1
             except asyncio.CancelledError:
-                # Dibatalkan (agent berhenti) di tengah tulis: tulisan mungkin sudah sampai tapi
-                # belum dibaca balik. State tidak diketahui = "mungkin ON" bagi safety, dan
-                # pemanggil (mis. trolley) tetap mematikan output di `finally`-nya.
+                # Batal di tengah tulis: state tak diketahui = "mungkin ON" bagi safety;
+                # pemanggil (mis. trolley) tetap mematikannya di `finally`.
                 st.on = None
                 self._update_polling_pause()
                 raise
@@ -264,11 +248,7 @@ class Outputs:
         return result
 
     async def stop_all(self, names, cause: str) -> None:
-        """Matikan output yang ON dengan prioritas STOP (S3).
-
-        Output yang state-nya tidak diketahui dilewati: relaynya tidak menjawab, dan begitu menjawab
-        lagi polling mematikan kanal yang ON tanpa perintah.
-        """
+        """Matikan output ON dengan prioritas STOP (S3); state tak diketahui dilewati."""
         for name in names:
             if self.states[name].on is True:
                 await self.set(name, False, priority=Priority.STOP, cause=cause)
