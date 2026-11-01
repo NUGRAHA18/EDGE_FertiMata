@@ -1,8 +1,4 @@
-"""Antarmuka HAL: satu-satunya pintu logika ke hardware.
-
-Logika agent tidak pernah mengimpor pymodbus, gpiod, atau cv2 (CLAUDE.md). Implementasi asli dan
-palsu sama-sama memenuhi kelas di bawah, sehingga hampir semua logika bisa dites di laptop.
-"""
+"""Antarmuka HAL, satu-satunya pintu ke hardware; logika tak mengimpor pymodbus/gpiod/cv2."""
 
 from __future__ import annotations
 
@@ -38,11 +34,7 @@ class CameraError(HalError):
 
 
 class ModbusBus(ABC):
-    """Akses mentah fungsi Modbus RTU. Penafsiran register adalah urusan profil (F3).
-
-    Hanya bus manager yang boleh memegang objek ini (Arsitektur §4.6 aturan 1).
-    `timeout_s=None` berarti memakai `bus.timeout_s` dari config.
-    """
+    """Modbus RTU mentah, hanya dipegang bus manager (§4.6); `timeout_s=None` = `bus.timeout_s`."""
 
     @abstractmethod
     async def open(self) -> None: ...

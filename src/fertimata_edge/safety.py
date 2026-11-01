@@ -1,11 +1,5 @@
-"""Penjaga lokal sebelum relay ditulis (Aturan keselamatan S4–S8, S12–S14, S16).
-
-Edge adalah lapis terakhir sebelum relay: aturan di sini berlaku walau backend mati. Output yang
-state-nya tidak diketahui (relay tidak menjawab) dianggap **mungkin ON**, sehingga ikut memblokir.
-
-S7 memakai sumber daya dari modul `power`: selain `MAINS` (termasuk belum diketahui) output
-`blocked_on_backup_power` ditolak. S9 (EC/pH tidak valid) menyusul bersama F6.
-"""
+"""Interlock lokal sebelum relay ditulis (S4–S8, S12–S14, S16), berlaku walau backend mati.
+State tak diketahui = mungkin ON; S7: selain MAINS, `blocked_on_backup_power` ditolak."""
 
 from __future__ import annotations
 
@@ -60,11 +54,9 @@ class Safety:
         self._blocked_by = {
             key: self.safety.expand(names) for key, names in self.safety.blocked_while_on.items()
         }
-        # Output yang sedang dikelola edge sendiri (mis. EC-POWER selama siklus analog, Kontrak §5):
-        # nama output → teks alasan. Perintah manual ON maupun OFF ditolak.
+        # Output dikelola edge (mis. EC-POWER saat siklus analog, §5): ON/OFF manual ditolak.
         self.managed: dict[str, str] = {}
-        # Sama, tetapi hanya ON yang ditolak: RUN selama gerakan otomatis trolley tetap bisa
-        # dihentikan (S3).
+        # Sama, tetapi hanya ON ditolak: RUN selama gerak otomatis tetap bisa dihentikan (S3).
         self.managed_on: dict[str, str] = {}
         # Diisi modul trolley saat kabel limit terdeteksi putus (S16): jalan ditolak sampai restart.
         self.travel_locked: str | None = None
@@ -73,12 +65,8 @@ class Safety:
     # --- pemeriksaan sebelum tulis ------------------------------------------------------------
 
     def check(self, name: str, on: bool, *, internal: bool = False) -> Refusal | None:
-        """None bila `name` boleh dibuat ON/OFF sekarang.
-
-        OFF hanya bisa ditolak oleh `blocked_while_on`: mengubah arah trolley atau pan saat
-        trolley jalan bukan tindakan berhenti (S12, S14). `internal=True` untuk modul edge yang
-        sedang memegang output itu sendiri (kunci `managed` tidak berlaku baginya).
-        """
+        """None bila `name` boleh ON/OFF sekarang. OFF hanya ditolak `blocked_while_on` (S12, S14).
+        `internal=True`: modul edge pemegang output, kunci `managed` tidak berlaku."""
         if not internal:
             if name in self.managed:
                 return Refusal(REASON_BUSY, self.managed[name])
@@ -105,11 +93,8 @@ class Safety:
         return None
 
     def check_activation(self, name: str) -> Refusal | None:
-        """Pemeriksaan awal perintah tingkat tinggi (F7.5, F8.4) yang nanti menyalakan `name`.
-
-        Hanya aturan yang tidak bergantung arah/posisi (rusak, daya S7, eksklusif S4–S6): cek
-        limit dan arah dilakukan modul trolley saat benar-benar mulai jalan.
-        """
+        """Cek awal perintah tingkat tinggi (F7.5, F8.4): rusak, daya S7, eksklusif S4–S6.
+        Limit dan arah dicek modul trolley saat mulai jalan."""
         if self.outputs.states[name].faulty:
             return Refusal(
                 REASON_OUTPUT_FAULT,
@@ -191,11 +176,8 @@ class Safety:
         return None
 
     def settle_delay(self, name: str, on: bool) -> float:
-        """Sisa jeda (detik) sebelum `name` boleh ditulis, urutan S12 / Arsitektur §5.3.1.
-
-        Output yang diblokir (DIR, pan) menunggu `stop_settle_ms` sejak RUN OFF; RUN menunggu
-        `dir_settle_ms` sejak DIR/pan terakhir berubah.
-        """
+        """Sisa jeda (s) sebelum `name` ditulis (S12): DIR/pan `stop_settle_ms` sejak RUN OFF,
+        RUN `dir_settle_ms` sejak DIR/pan berubah."""
         now = self.clock.monotonic()
         wait = 0.0
         for blocker in self._blocked_by.get(name, ()):

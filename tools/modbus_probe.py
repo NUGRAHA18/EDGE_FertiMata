@@ -1,21 +1,5 @@
-"""Baca/tulis register satu perangkat Modbus RTU dari command line (TASKS F3.1).
-
-Dipakai untuk cek lapangan P-H3 … P-H8 sebelum hasilnya ditulis ke `fertimata.yaml`.
-Panduan lengkap: docs/03-persiapan.md bagian "Cara cek register dengan modbus_probe".
-
-PENTING: hentikan agent dulu (`sudo systemctl stop fertimata-edge`). Hanya satu program yang
-boleh memakai port RS485 dalam satu waktu (Arsitektur §4.6).
-
-Contoh:
-    # PZEM-016 alamat 30: 10 input register mulai 0x0000
-    python tools/modbus_probe.py --port /dev/rs485 --unit 30 --fc 4 --address 0 --count 10
-    # Cari alamat yang menjawab (P-H3)
-    python tools/modbus_probe.py --port /dev/rs485 --scan 1-30 --fc 3 --address 0
-    # Relay 20 kanal R1 ON lewat coil (uji profil A, P-H4) — menyalakan beban sungguhan!
-    python tools/modbus_probe.py --port /dev/rs485 --unit 20 --fc 5 --address 1 --value on --yes
-    # Latihan tanpa hardware (simulator config dev)
-    python tools/modbus_probe.py --fake --unit 30 --fc 4 --address 0 --count 10
-"""
+"""Baca/tulis register satu perangkat Modbus RTU (F3.1) untuk cek P-H3 … P-H8.
+Hentikan agent dulu (satu pemilik RS485, §4.6). Panduan: docs/03-persiapan.md."""
 
 from __future__ import annotations
 
@@ -116,9 +100,7 @@ def _parse_value(parser: argparse.ArgumentParser, fc: int, text: str) -> int | b
     return value
 
 
-# --------------------------------------------------------------------------------------------
-# Format keluaran
-# --------------------------------------------------------------------------------------------
+# --- Format keluaran ------------------------------------------------------------------------
 
 
 def format_registers(start: int, words: list[int]) -> list[str]:
@@ -151,9 +133,7 @@ def describe_error(err: Exception) -> str:
     return str(err)
 
 
-# --------------------------------------------------------------------------------------------
-# Eksekusi
-# --------------------------------------------------------------------------------------------
+# --- Eksekusi -------------------------------------------------------------------------------
 
 
 async def read_once(bus: ModbusBus, unit: int, fc: int, address: int, count: int, timeout: float):

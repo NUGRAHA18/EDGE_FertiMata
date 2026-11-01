@@ -1,20 +1,5 @@
-"""Siklus baca larutan drum: pH, EC, suhu (Arsitektur §6.3, F6.3–F6.5).
-
-Urutan (probe EC dan pH di larutan yang sama; eksitasi EC mengganggu pH):
-R5 OFF → tunggu `settle_s` → median `samples` bacaan pH → R5 ON → tunggu → median EC → R5 OFF →
-baca DS18B20. Selama siklus EC-POWER (R5) dikelola edge: perintah manual ditolak (Kontrak §5).
-
-Konversi:
-- EC mengikuti pustaka DFRobot DFR0300: dua nilai K (rentang rendah dari larutan 1413 µS/cm,
-  rentang tinggi dari 12,88 mS/cm) dengan perpindahan rentang berhisteresis, lalu dikompensasi ke
-  25 °C: `EC25 = EC / (1 + temp_coef × (T − 25))`. Tanpa suhu larutan EC tidak dikirim, karena
-  katalog mendefinisikan `tank.ec` sudah terkompensasi (Kontrak §3).
-- pH linear dari kalibrasi 2/3 titik (kuadrat terkecil), slope dikoreksi suhu (Nernst, sebanding
-  suhu mutlak) di sekitar pH 7.
-
-S9: nilai di luar `analog.valid` dibuang dari telemetri, alert `EC_PH_INVALID`, dan bacaan
-ditandai tidak layak untuk dosing (`valid_for_dosing`).
-"""
+"""Siklus larutan drum (§6.3, F6.3–F6.5): R5 OFF → median pH, R5 ON → median EC, R5 OFF, DS18B20.
+EC: K dua rentang DFR0300, kompensasi 25 °C (tanpa suhu tak dikirim); S9: di luar `valid` dibuang"""
 
 from __future__ import annotations
 

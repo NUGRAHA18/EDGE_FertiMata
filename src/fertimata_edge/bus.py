@@ -1,13 +1,5 @@
-"""Bus manager: satu-satunya pemilik `/dev/rs485` (Arsitektur §4.6 aturan 1).
-
-- Antrean berprioritas STOP > perintah > polling. STOP tidak bisa memotong transaksi yang sedang
-  berjalan (maks. satu timeout), tetapi selalu menjadi transaksi berikutnya (S3).
-- Jeda ≥ `bus.gap_ms` antar transaksi, timeout per perangkat, ulang `bus.retries` kali
-  (§4.6 aturan 2).
-- Perangkat dinyatakan "tidak menjawab" setelah `bus.fail_threshold` permintaan gagal
-  berturut-turut, dan kembali "menjawab" pada jawaban pertama berikutnya.
-- Polling bisa dijeda selama trolley bergerak; STOP dan perintah tetap jalan (S14, §9.2).
-"""
+"""Bus manager, pemilik tunggal `/dev/rs485` (§4.6): antrean STOP > perintah > polling (S3).
+Jeda `gap_ms`, retry `retries`, diam setelah `fail_threshold` gagal; polling dijeda (S14)."""
 
 from __future__ import annotations
 

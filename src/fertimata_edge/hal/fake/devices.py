@@ -1,10 +1,5 @@
-"""Perangkat Modbus palsu untuk simulator.
-
-Setiap perangkat menyimpan empat tabel Modbus (coil, discrete input, holding, input register).
-Perilaku default-nya memori biasa: yang ditulis bisa dibaca lagi. Subkelas menambah perilaku
-fisik (relay, PZEM, XY-MD02). Peta register perangkat yang belum terverifikasi (tanah, cahaya,
-DS18B20, ADC) sengaja tidak ditebak di sini; test atau config F3 mengisinya lewat `set_*`.
-"""
+"""Perangkat Modbus palsu: empat tabel (coil, DI, holding, IR) berperilaku memori.
+Subkelas menambah fisika (relay, PZEM, XY-MD02); peta belum terverifikasi diisi lewat `set_*`."""
 
 from __future__ import annotations
 
@@ -64,12 +59,8 @@ class FakeModbusDevice:
 
 
 class FakeRelayModule(FakeModbusDevice):
-    """Relay Modbus palsu dengan state per kanal dan input digital (IN1 …).
-
-    Menjawab sesuai peta `relay` di config (profil A coil / B holding, P-H4), sehingga profil
-    yang salah ketik di config gagal juga di laptop: fungsi yang tidak dipakai profil dijawab
-    exception ILLEGAL_FUNCTION, alamat di luar kanal dijawab ILLEGAL_DATA_ADDRESS.
-    """
+    """Relay palsu per kanal + input digital (IN1 …), mengikuti peta `relay` di config (P-H4).
+    FC di luar profil → ILLEGAL_FUNCTION; alamat di luar kanal → ILLEGAL_DATA_ADDRESS."""
 
     def __init__(
         self, unit: int, channels: int, relay_map: RelayMapConfig, inputs: int = 0
@@ -163,10 +154,7 @@ def _split32(value: int) -> tuple[int, int]:
 
 
 class FakePzem016(FakeModbusDevice):
-    """PZEM-016 palsu. Peta register terverifikasi dari manual Peacefair (Arsitektur §4.5).
-
-    Sisi ukur PZEM ditenagai PLN, jadi saat `mains_on` False perangkat ini diam (§7.4).
-    """
+    """PZEM-016 palsu, peta dari manual Peacefair (§4.5); diam saat `mains_on` False (§7.4)."""
 
     def __init__(self, unit: int, voltage_v: float, current_fn: Callable[[], float]) -> None:
         super().__init__(unit)

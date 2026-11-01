@@ -1,8 +1,5 @@
-"""Model payload MQTT, mengikuti record Java di backend `mqtt/payload/*.java` (Kontrak §4–§5).
-
-Waktu selalu UTC ISO-8601 dengan `Z`. Field opsional yang kosong tidak dikirim, kecuali
-`errorMessage` di ACK yang menurut kontrak §4.3 dikirim `null` saat sukses.
-"""
+"""Model payload MQTT, sesuai record Java `mqtt/payload/*.java` (Kontrak §4–§5); waktu UTC `Z`.
+Field opsional kosong tidak dikirim, kecuali `errorMessage: null` di ACK sukses (§4.3)."""
 
 from __future__ import annotations
 
@@ -154,9 +151,7 @@ class AiPayload(_Outbound):
         return _dumps(body)
 
 
-# --------------------------------------------------------------------------------------------
-# Masuk: perintah dari backend
-# --------------------------------------------------------------------------------------------
+# --- Masuk: perintah dari backend -----------------------------------------------------------
 
 
 class CommandPayload(BaseModel):

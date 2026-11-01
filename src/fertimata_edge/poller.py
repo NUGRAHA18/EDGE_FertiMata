@@ -1,14 +1,5 @@
-"""Polling sensor terjadwal per kelompok → telemetri per device logis (Arsitektur §4.6, F3.7).
-
-Metrik yang gagal dibaca dihilangkan, tidak diisi angka palsu (Kontrak §4.1). Alert
-`MODBUS_TIMEOUT` (per perangkat) dan `BUS_DOWN` (seluruh bus) dikirim selama gangguan berlangsung;
-link menahan pengulangannya sesuai `mqtt.alert_repeat_s` (F3.8).
-
-Relay (`relays_s`) dibaca `outputs`; EC/pH lewat ADC punya urutan baca sendiri (F6).
-
-Kelompok di `PUBLISH_OF_GROUP` dikirim lebih jarang daripada dibaca (bacaan terakhir saat jatuh
-tempo). Listener bacaan (daya, patroli) tetap menerima setiap bacaan.
-"""
+"""Polling sensor per kelompok → telemetri per device logis (§4.6, F3.7); metrik gagal dihilangkan.
+Alert MODBUS_TIMEOUT/BUS_DOWN selama gangguan; kelompok `PUBLISH_OF_GROUP` dikirim lebih jarang."""
 
 from __future__ import annotations
 
@@ -36,8 +27,7 @@ GROUP_OF_PROFILE = {
     "ds18b20_mb": "tank_s",
 }
 
-# Kelompok polling → kunci interval kirim di `polling`. PZEM: ±75 % volume data backend bila
-# dikirim tiap 3 s; perubahan sumber daya tetap segera lewat status `powerSource` (Kontrak §3).
+# Kelompok → interval kirim. PZEM tiap 3 s = ±75 % volume backend; powerSource tetap via status.
 PUBLISH_OF_GROUP = {"pzem_s": "pzem_publish_s"}
 
 

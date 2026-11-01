@@ -1,7 +1,4 @@
-"""Suhu SoC Jetson → telemetri `jetson.soc_temperature` dan alert `SOC_HOT` (F5.4).
-
-Kunci metrik mengikuti katalog backend (Kontrak §3). Bacaan yang gagal tidak dikirim.
-"""
+"""Suhu SoC Jetson → telemetri `jetson.soc_temperature` dan alert `SOC_HOT` (F5.4, Kontrak §3)."""
 
 from __future__ import annotations
 

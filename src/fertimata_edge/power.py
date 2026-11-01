@@ -1,19 +1,5 @@
-"""Sumber daya `MAINS`/`BATTERY`/`UNKNOWN`, respons PLN padam (S7), dan arus pompa (S10, S11).
-
-Penentu sumber daya (Arsitektur §7.4):
-- PZEM (`power.pzem_device`) diam sementara relay acuan (`power.reference_device`) menjawab →
-  `BATTERY`, karena sisi ukur PZEM ditenagai PLN. Keduanya diam → `UNKNOWN` (gangguan bus).
-- PZEM menjawab: tegangan < `outage_voltage_v` → `BATTERY`; kembali `MAINS` baru setelah
-  ≥ `restore_voltage_v` (histeresis). Di antara keduanya state lama dipertahankan; tanpa state
-  lama dianggap `BATTERY` (konservatif).
-- Sebelum ada data, sumber daya `None`: status tidak memuat `powerSource` (Q7), dan output
-  `blocked_on_backup_power` tetap ditolak `safety` sampai terbukti `MAINS`.
-
-Setiap kali sumber daya menjadi bukan `MAINS`, output `blocked_on_backup_power` yang ON dimatikan
-dengan prioritas STOP, tanpa menunggu backend. Pemantauan arus (§7.5) memakai arus total panel:
-arus > baseline + margin saat pompa OFF = SSR short; kenaikan arus < `dry_run_ratio` × nominal
-saat pompa ON = pompa kering → pompa dimatikan.
-"""
+"""Sumber daya MAINS/BATTERY/UNKNOWN (§7.4), S7 padam → OFF lokal, arus pompa S10/S11 (§7.5).
+PZEM diam + relay acuan menjawab = BATTERY; V < outage → BATTERY, ≥ restore → MAINS (histeresis)."""
 
 from __future__ import annotations
 

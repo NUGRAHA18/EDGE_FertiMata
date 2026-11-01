@@ -1,16 +1,5 @@
-"""Penyimpanan foto patroli + metadata (keputusan D1, Protokol §4, F8.2) dan ruang disk (F8.5).
-
-Tata letak (D1): `<root>/YYYY-MM-DD/YYYYMMDD-HHMM_S{nn}_{timur|barat}.png`, waktu lokal
-(`agent.utc_offset_h`, WIB). Folder memakai tanggal **mulai patroli** supaya satu patroli tidak
-terbelah tengah malam. Nama berkas tanpa ekstensi = `captureId` di hasil AI (Kontrak §4.5).
-
-Setiap foto punya sidecar `.json` (stasiun, arah, eksposur, suhu, kelembapan, ketajaman). Keduanya
-ditulis ke berkas sementara lalu di-rename, dan sidecar ditulis **sesudah** foto: layanan AI (D6)
-cukup menunggu `.json` muncul untuk tahu fotonya sudah utuh.
-
-Data riset tidak pernah dihapus otomatis. Ruang disk hanya dilaporkan; di bawah batas kritis foto
-tidak disimpan lagi supaya sistem Jetson tetap punya ruang (journald, paket).
-"""
+"""Foto patroli + sidecar `.json` (D1, F8.2): `<root>/YYYY-MM-DD/YYYYMMDD-HHMM_S{nn}_{arah}.png`.
+Waktu WIB; nama = `captureId` (§4.5); sidecar ditulis sesudah foto; tak pernah dihapus (F8.5)."""
 
 from __future__ import annotations
 

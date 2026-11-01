@@ -1,9 +1,5 @@
-"""Antrean pesan keluar selama broker tidak tersambung (TASKS F2.6).
-
-Telemetri dan status boleh dibuang (yang tertua dulu) karena nilai baru akan menyusul. ACK, alert,
-dan hasil AI tidak pernah dibuang: ACK adalah satu-satunya jalan command keluar dari SENT
-(Konsep §4.3), dan alert bisa berisi bahaya.
-"""
+"""Antrean keluar saat broker putus (F2.6): telemetri/status tertua boleh dibuang.
+ACK, alert, hasil AI tidak pernah dibuang (ACK satu-satunya jalan keluar dari SENT, Konsep §4.3)."""
 
 from __future__ import annotations
 

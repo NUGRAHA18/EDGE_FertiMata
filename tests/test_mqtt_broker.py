@@ -1,7 +1,5 @@
-"""Uji link melawan Mosquitto sungguhan di 127.0.0.1:1883. Dilewati bila broker tidak ada.
-
-Menyalakan broker: `docker compose up -d mosquitto` di repo backend.
-"""
+"""Uji link melawan Mosquitto di 127.0.0.1:1883; dilewati bila broker tidak ada.
+Nyalakan: `docker compose up -d mosquitto` di repo backend."""
 
 from __future__ import annotations
 

@@ -1,11 +1,5 @@
-"""Siklus hidup agent: buka HAL, jalankan tugas latar, berhenti bersih.
-
-Urutan boot (Konsep §4.1): HAL → bus manager → S1 (OFF semua relay + baca balik) → baca PZEM
-(powerSource awal) → link MQTT → polling relay, penjaga limit, trolley, daya, SoC, larutan, poller
-sensor, jadwal patroli.
-Aturan §12.1: S1 selesai sebelum link MQTT dan tugas lain dimulai, jadi tidak ada perintah yang
-bisa sampai ke relay sebelum relay terbukti OFF.
-"""
+"""Siklus hidup agent (Konsep §4.1): HAL → bus → S1 → PZEM → link MQTT → tugas latar.
+Aturan §12.1: S1 (semua relay OFF, terbaca balik) selesai sebelum link MQTT menerima perintah."""
 
 from __future__ import annotations
 
@@ -162,8 +156,7 @@ class Agent:
             await self._shutdown()
 
     async def _initial_power(self) -> None:
-        # Konsep §4.1 langkah 4: powerSource awal sebelum perintah diterima. PZEM yang diam baru
-        # dinyatakan diam setelah `bus.fail_threshold` kegagalan, jadi dicoba sebanyak itu.
+        # §4.1 langkah 4: powerSource awal sebelum perintah; PZEM dicoba `fail_threshold` kali.
         pzem = self.config.power.pzem_device
         if pzem not in self.poller.profiles:
             return
@@ -242,12 +235,8 @@ class Agent:
                 raise task.exception()  # type: ignore[misc]
 
     async def _all_off_on_stop(self) -> None:
-        """Q9: berhenti normal tidak meninggalkan relay ON.
-
-        Watchdog durasi (S2) ikut berhenti bersama agent, jadi pompa yang ON akan tetap ON sampai
-        agent start lagi (S1). Dibatasi `agent.stop_off_timeout_s` supaya bus yang macet tidak
-        membuat systemd membunuh agent di tengah jalan (`TimeoutStopSec`).
-        """
+        """Q9: semua relay OFF saat berhenti normal, karena watchdog S2 ikut berhenti bersama agent.
+        Dibatasi `agent.stop_off_timeout_s` supaya selesai sebelum `TimeoutStopSec` systemd."""
         if self.bus.task is None or self.bus.task.done():
             return  # bus tidak pernah jalan atau sudah mati: tidak ada yang bisa ditulis
         off = asyncio.ensure_future(self.outputs.all_off(cause="stop"))

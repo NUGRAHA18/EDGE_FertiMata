@@ -1,11 +1,5 @@
-"""Simulator greenhouse untuk `agent.hal: fake`.
-
-`FakeWorld` memegang semua perangkat palsu dan keadaan fisik yang menghubungkan mereka:
-pompa distribusi menaikkan arus PZEM, relay RUN/DIR menggerakkan trolley, posisi trolley
-menentukan reed/HOME/END, pompa pupuk menaikkan EC drum setelah teraduk (F9). Test memajukan
-simulasi secara deterministik lewat `step(dt)`; agent di laptop menjalankan `run(clock)` sebagai
-tugas latar.
-"""
+"""Simulator `agent.hal: fake`: pompa → arus PZEM, RUN/DIR → trolley → reed/limit, pupuk → EC.
+Test memajukan lewat `step(dt)`; agent di laptop menjalankan `run(clock)` sebagai tugas latar."""
 
 from __future__ import annotations
 
@@ -22,8 +16,7 @@ log = logging.getLogger(__name__)
 
 GPIO_LINES = ("reed", "home", "end")
 
-# Nilai awal simulasi per nama field register, untuk perangkat yang peta registernya dari config
-# (tanah, cahaya, DS18B20). Hanya agar dashboard terisi angka wajar.
+# Nilai awal untuk perangkat yang peta registernya dari config (tanah, cahaya, DS18B20).
 SIM_VALUES = {
     "moisture": 34.5,
     "temperature": 27.8,
@@ -88,8 +81,7 @@ class FakeWorld:
         self.port_present = True
         self.trolley = FakeTrolley(config)
         self.soc_temperature_c: float | None = config.fake.soc_temperature_c
-        # Gangguan pompa untuk uji §7.5: SSR short (arus mengalir walau R0 OFF) dan pompa kering
-        # (arus pompa hanya sebagian kecil nominal).
+        # Gangguan pompa uji §7.5: SSR short (arus walau R0 OFF) dan pompa kering (arus kecil).
         self.ssr_shorted = False
         self.pump_dry = False
         self._gpio_listeners: list[Callable[[str, bool], None]] = []
@@ -120,9 +112,7 @@ class FakeWorld:
             )
         self._update_analog()
 
-        # Pompa pupuk menambah stok ke drum (perintah mentah DOSING-N/P/K); test boleh mengubah
-        # debit untuk meniru stok habis atau selang tersumbat. Stok baru terbaca probe setelah
-        # tercampur.
+        # Pompa pupuk menambah stok (debit bisa diubah test); terbaca probe setelah tercampur.
         fake = config.fake
         self.tank_volume_l = fake.tank_volume_l
         self.dose_flow_ml_s = {name: pump.flow_ml_s for name, pump in fake.dose_pumps.items()}

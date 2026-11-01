@@ -1,9 +1,5 @@
-"""Pengganti GPIO dan kamera di mode `hal: real` sampai HAL aslinya selesai (F7, F8).
-
-Dibuat supaya bus Modbus asli bisa diuji di Jetson (F3.9) sebelum papan GPIO dan kamera siap.
-GPIO pengganti melaporkan HOME dan END **aktif**, sama dengan kabel limit putus (§6.1), sehingga
-logika trolley menganggap trolley terkunci. Itu keadaan aman.
-"""
+"""Pengganti GPIO/kamera untuk `hal: real` sampai F7/F8 selesai (uji bus asli F3.9).
+GPIO melaporkan HOME dan END aktif (= kabel putus, §6.1), jadi trolley terkunci: keadaan aman."""
 
 from __future__ import annotations
 
